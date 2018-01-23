@@ -260,8 +260,10 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
 static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                             double pressure, int which, int type, uint32_t state,
                                             dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
-                                            int index)
+                                            int index, int *modified)
 {
+  *modified = 0;
+
   if(!gui) return 0;
   if(gui->source_selected && !gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
@@ -321,6 +323,8 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
   }
   else if(gui->creation)
   {
+    *modified = 1;
+
     dt_iop_module_t *crea_module = gui->creation_module;
     // we create the ellipse
     dt_masks_point_ellipse_t *ellipse
@@ -1104,7 +1108,7 @@ static int dt_ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_
   }
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, 0, module->priority, points, l + 5))
+  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, 0, module->priority, points, l + 5))
   {
     free(points);
     return 0;

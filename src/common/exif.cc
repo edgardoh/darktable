@@ -2131,6 +2131,19 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     sqlite3_exec(dt_database_get(darktable.db), "BEGIN TRANSACTION", NULL, NULL, NULL);
 
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                                &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
+    if(sqlite3_step(stmt) != SQLITE_DONE)
+    {
+      fprintf(stderr, "[exif] error deleting masks history for image %d\n", img->id);
+      fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+      all_ok = FALSE;
+      goto end;
+    }
+
+    sqlite3_finalize(stmt);
+    
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
                                 &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
@@ -2146,8 +2159,8 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "INSERT INTO main.history (imgid, num, module, operation, op_params, enabled, "
-                                "blendop_params, blendop_version, multi_priority, multi_name) "
-                                "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", -1, &stmt, NULL);
+                                "blendop_params, blendop_version, multi_priority, multi_name, hist_type) "
+                                "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)", -1, &stmt, NULL);
 
     for(GList *iter = history_entries; iter; iter = g_list_next(iter))
     {
@@ -2178,6 +2191,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       {
         DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, "", -1, SQLITE_TRANSIENT); // "" instead of " " should be fine now
       }
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, DT_DEV_HISTORY_TYPE_IOP);
 
       if(sqlite3_step(stmt) != SQLITE_DONE)
       {

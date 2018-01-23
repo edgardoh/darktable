@@ -566,9 +566,8 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   while(dev->history)
   {
     // clear history of old image
-    free(((dt_dev_history_item_t *)dev->history->data)->params);
-    free(((dt_dev_history_item_t *)dev->history->data)->blend_params);
-    free((dt_dev_history_item_t *)dev->history->data);
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(dev->history->data);
+    dt_dev_free_history_item(hist);
     dev->history = g_list_delete_link(dev->history, dev->history);
   }
 

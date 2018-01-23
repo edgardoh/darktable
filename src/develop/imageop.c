@@ -757,7 +757,8 @@ static void dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params)
   while(history)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-    if(hist->module->instance == base->instance) hist->multi_priority = hist->module->multi_priority;
+    if(hist->hist_type == DT_DEV_HISTORY_TYPE_IOP && hist->module->instance == base->instance)
+      hist->multi_priority = hist->module->multi_priority;
     history = g_list_next(history);
   }
 
@@ -1482,12 +1483,14 @@ dt_iop_colorspace_type_t dt_iop_module_colorspace(const dt_iop_module_t *module)
 
 static void dt_iop_gui_reset_callback(GtkButton *button, dt_iop_module_t *module)
 {
+  int has_masks = 0;
   // if a drawn mask is set, remove it from the list
   if(module->blend_params->mask_id > 0)
   {
     dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
     if(grp) dt_masks_form_remove(module, NULL, grp);
     dt_dev_masks_list_change(module->dev);
+    has_masks = 1;
   }
   /* reset to default params */
   memcpy(module->params, module->default_params, module->params_size);
@@ -1499,7 +1502,10 @@ static void dt_iop_gui_reset_callback(GtkButton *button, dt_iop_module_t *module
   /* update ui to default params*/
   dt_iop_gui_update(module);
 
-  dt_dev_add_history_item(module->dev, module, TRUE);
+  if (has_masks)
+    dt_dev_add_maks_history_item(module->dev, module, TRUE);
+  else
+    dt_dev_add_history_item(module->dev, module, TRUE);
 }
 
 #if !GTK_CHECK_VERSION(3, 22, 0)
@@ -1584,6 +1590,9 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     if(module->operation_tags_filter()) dt_dev_invalidate_from_gui(darktable.develop);
 
     dt_accel_connect_locals_iop(module);
+
+    /*reset mask view */
+    dt_masks_reset_form_gui();
 
     if(module->gui_focus) module->gui_focus(module, TRUE);
   }

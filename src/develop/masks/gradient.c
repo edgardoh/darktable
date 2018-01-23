@@ -116,8 +116,10 @@ static int dt_gradient_events_mouse_scrolled(struct dt_iop_module_t *module, flo
 static int dt_gradient_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                              double pressure, int which, int type, uint32_t state,
                                              dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
-                                             int index)
+                                             int index, int *modified)
 {
+  *modified = 0;
+
   if(!gui) return 0;
   if(!gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
@@ -185,6 +187,8 @@ static int dt_gradient_events_button_pressed(struct dt_iop_module_t *module, flo
       // we select the new form
       dt_dev_masks_selection_change(darktable.develop, form->formid, TRUE);
     }
+
+    *modified = 1;
 
     return 1;
   }

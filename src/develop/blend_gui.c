@@ -635,7 +635,7 @@ static int _blendop_masks_add_path(GtkWidget *widget, GdkEventButton *event, dt_
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
     // we create the new form
-    dt_masks_form_t *form = dt_masks_create(DT_MASKS_PATH);
+    dt_masks_form_t *form = dt_masks_create(self->dev, DT_MASKS_PATH);
     dt_masks_change_form_gui(form);
     darktable.develop->form_gui->creation = TRUE;
     darktable.develop->form_gui->creation_module = self;
@@ -660,7 +660,7 @@ static int _blendop_masks_add_circle(GtkWidget *widget, GdkEventButton *event, d
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
     // we create the new form
-    dt_masks_form_t *spot = dt_masks_create(DT_MASKS_CIRCLE);
+    dt_masks_form_t *spot = dt_masks_create(self->dev, DT_MASKS_CIRCLE);
     dt_masks_change_form_gui(spot);
     darktable.develop->form_gui->creation = TRUE;
     darktable.develop->form_gui->creation_module = self;
@@ -685,7 +685,7 @@ static int _blendop_masks_add_ellipse(GtkWidget *widget, GdkEventButton *event, 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
     // we create the new form
-    dt_masks_form_t *spot = dt_masks_create(DT_MASKS_ELLIPSE);
+    dt_masks_form_t *spot = dt_masks_create(self->dev, DT_MASKS_ELLIPSE);
     dt_masks_change_form_gui(spot);
     darktable.develop->form_gui->creation = TRUE;
     darktable.develop->form_gui->creation_module = self;
@@ -710,7 +710,7 @@ static int _blendop_masks_add_brush(GtkWidget *widget, GdkEventButton *event, dt
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
     // we create the new form
-    dt_masks_form_t *form = dt_masks_create(DT_MASKS_BRUSH);
+    dt_masks_form_t *form = dt_masks_create(self->dev, DT_MASKS_BRUSH);
     dt_masks_change_form_gui(form);
     darktable.develop->form_gui->creation = TRUE;
     darktable.develop->form_gui->creation_module = self;
@@ -735,7 +735,7 @@ static int _blendop_masks_add_gradient(GtkWidget *widget, GdkEventButton *event,
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
     // we create the new form
-    dt_masks_form_t *spot = dt_masks_create(DT_MASKS_GRADIENT);
+    dt_masks_form_t *spot = dt_masks_create(self->dev, DT_MASKS_GRADIENT);
     dt_masks_change_form_gui(spot);
     darktable.develop->form_gui->creation = TRUE;
     darktable.develop->form_gui->creation_module = self;
@@ -754,9 +754,10 @@ static int _blendop_masks_show_and_edit(GtkWidget *widget, GdkEventButton *event
 
   if(event->button == 1)
   {
+    dt_iop_request_focus(self);
+    
     darktable.gui->reset = 1;
 
-    dt_iop_request_focus(self);
     self->request_color_pick = DT_REQUEST_COLORPICK_OFF;
 
     dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, self->blend_params->mask_id);

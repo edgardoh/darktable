@@ -608,9 +608,7 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
     {
       GList *next = g_list_next(history);
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-      free(hist->params);
-      free(hist->blend_params);
-      free(history->data);
+      dt_dev_free_history_item(hist);
       dev.history = g_list_delete_link(dev.history, history);
       history = next;
     }
@@ -653,6 +651,8 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
           h->module = style_module;
           h->multi_priority = s->multi_priority;
           g_strlcpy(h->multi_name, s->name, sizeof(h->multi_name));
+          h->hist_type = DT_DEV_HISTORY_TYPE_IOP;
+          h->forms = NULL;
 
           if(m->legacy_params && (s->module_version != m->version()))
           {
