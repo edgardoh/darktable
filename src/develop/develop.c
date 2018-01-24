@@ -1185,11 +1185,13 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   dt_dev_invalidate_all(dev);
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
-  if(dev->gui_attached)
+  if (darktable.develop->gui_module && dev->form_gui)
   {
     /*reset mask view */
     dt_masks_reset_form_gui();
-    
+  }
+  if(dev->gui_attached)
+  {
     /* signal that history has changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }

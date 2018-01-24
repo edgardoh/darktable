@@ -332,6 +332,7 @@ static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state,
 
 static void _tree_cleanup(GtkButton *button, dt_lib_module_t *self)
 {
+  dt_masks_change_form_gui(NULL);
   dt_masks_cleanup_unused(darktable.develop);
   dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
 }
