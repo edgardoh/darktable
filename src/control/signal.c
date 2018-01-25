@@ -92,6 +92,8 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     NULL, NULL, FALSE }, // DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED
   { "dt-develop-history-change", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0,
     NULL, NULL, FALSE }, // DT_SIGNAL_HISTORY_CHANGE
+  { "dt-develop-refresh-history", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0,
+    NULL, NULL, FALSE }, // DT_SIGNAL_REFRESH_HISTORY
   { "dt-develop-module-remove", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 1,
     pointer_arg, NULL, TRUE }, // DT_SIGNAL_MODULE_REMOVE
   { "dt-develop-image-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0,

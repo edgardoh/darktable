@@ -112,6 +112,16 @@ GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
   return _dup_masks_forms_deep(forms, form);
 }
 
+dt_masks_form_t *dt_masks_dup_from_id_deep(dt_develop_t *dev, const int id)
+{
+  return _dup_masks_form(dt_masks_get_from_id(dev, id));
+}
+
+void dt_masks_free_from_deep(dt_masks_form_t *form)
+{
+  dt_masks_free_form(form);
+}
+
 static _masks_undo_data_t *_create_snapshot(GList *forms, dt_masks_form_t *form, dt_develop_t *dev)
 {
   _masks_undo_data_t *data = malloc(sizeof(struct _masks_undo_data_t));
@@ -135,11 +145,36 @@ void _masks_do_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *ite
   dt_develop_t *dev = (dt_develop_t *)user_data;
   _masks_undo_data_t *udata = (_masks_undo_data_t *)item;
 
-  dev->forms = _dup_masks_forms_deep(udata->forms, NULL);
   dev->form_gui->creation = FALSE;
+  dev->form_gui->creation_module = NULL;
+
+  if (dev->forms)
+  {
+    g_list_free(dev->forms);
+    dev->forms = NULL;
+  }
+  if (dev->allforms)
+  {
+    g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+    dev->allforms = NULL;
+  }
+  if (udata->forms)
+  {
+    dev->forms = dt_masks_dup_forms_deep(udata->forms, NULL);
+    
+    GList *forms = g_list_first(dev->forms);
+    while(forms)
+    {
+      dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+      dev->allforms = g_list_append(dev->allforms, form);
+      forms = g_list_next(forms);
+    }
+  }
 
   dt_masks_clear_form_gui(dev);
-  dt_masks_change_form_gui(_dup_masks_form(udata->form));
+  dt_masks_form_t *form_gui = _dup_masks_form(udata->form);
+  if (form_gui) dev->allforms = g_list_append(dev->allforms, form_gui);
+  dt_masks_change_form_gui(form_gui);
 
   _masks_write_forms_db(dev, FALSE);
 
@@ -968,7 +1003,6 @@ dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id)
   }
   return NULL;
 }
-
 
 void dt_masks_read_forms(dt_develop_t *dev)
 {

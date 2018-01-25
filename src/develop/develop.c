@@ -863,6 +863,7 @@ void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolea
   {
     /* signal that history has changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
 
     /* redraw */
     dt_control_queue_redraw_center();
@@ -975,6 +976,7 @@ void dt_dev_add_maks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gb
   {
     /* signal that history has changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
 
     /* redraw */
     dt_control_queue_redraw_center();
@@ -1193,7 +1195,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   if(dev->gui_attached)
   {
     /* signal that history has changed */
-    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
   }
 
   dt_control_queue_redraw_center();
@@ -1751,6 +1753,7 @@ void dt_dev_read_history(dt_develop_t *dev)
 
     /* signal history changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
   }
   sqlite3_finalize(stmt);
 }
@@ -2124,6 +2127,7 @@ void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename)
 
 void dt_dev_invalidate_from_gui(dt_develop_t *dev)
 {
+  printf("dt_dev_invalidate_from_gui\n");
   dt_dev_pop_history_items(darktable.develop, darktable.develop->history_end);
 }
 
@@ -2269,6 +2273,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     /* signal that history has changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_REMOVE, module);
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
     /* redraw */
     dt_control_queue_redraw_center();
   }

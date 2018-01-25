@@ -1775,7 +1775,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_show_all(self->widget);
 
   /* connect to history change signal for updating the history view */
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY,
                             G_CALLBACK(_lib_history_change_callback), self);
 
   // set proxy functions
