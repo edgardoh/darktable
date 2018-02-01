@@ -897,7 +897,10 @@ void dt_dev_add_maks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gb
           g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
           hist->forms = NULL;
         }
-        if (dev->forms) hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
       }
     }
   }
@@ -945,7 +948,10 @@ void dt_dev_add_maks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gb
         hist->blend_params = NULL;
 
         hist->forms = NULL;
-        if (dev->forms) hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
 
         dev->history = g_list_append(dev->history, hist);
         dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -959,7 +965,10 @@ void dt_dev_add_maks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gb
           g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
           hist->forms = NULL;
         }
-        if (dev->forms) hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
         
         dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
         dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
@@ -2127,7 +2136,6 @@ void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename)
 
 void dt_dev_invalidate_from_gui(dt_develop_t *dev)
 {
-  printf("dt_dev_invalidate_from_gui\n");
   dt_dev_pop_history_items(darktable.develop, darktable.develop->history_end);
 }
 

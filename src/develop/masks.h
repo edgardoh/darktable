@@ -319,14 +319,6 @@ int dt_masks_point_in_form_near(float x, float y, float *points, int points_star
 /* duplicate the list of forms, replace item in the list with form is the same formid */
 GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form);
 
-/* duplicate the form with formid=id in dev->forms, it does not add it to dev->allforms
- * the returned form must be free with dt_masks_free_from_deep()
- */
-dt_masks_form_t *dt_masks_dup_from_id_deep(dt_develop_t *dev, const int id);
-
-/* free form returned by dt_masks_dup_from_id_deep() */
-void dt_masks_free_from_deep(dt_masks_form_t *form);
-
 
 /** code for dynamic handling of intermediate buffers */
 static inline

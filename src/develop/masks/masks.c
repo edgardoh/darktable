@@ -112,16 +112,6 @@ GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
   return _dup_masks_forms_deep(forms, form);
 }
 
-dt_masks_form_t *dt_masks_dup_from_id_deep(dt_develop_t *dev, const int id)
-{
-  return _dup_masks_form(dt_masks_get_from_id(dev, id));
-}
-
-void dt_masks_free_from_deep(dt_masks_form_t *form)
-{
-  dt_masks_free_form(form);
-}
-
 static _masks_undo_data_t *_create_snapshot(GList *forms, dt_masks_form_t *form, dt_develop_t *dev)
 {
   _masks_undo_data_t *data = malloc(sizeof(struct _masks_undo_data_t));
@@ -173,7 +163,10 @@ void _masks_do_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *ite
 
   dt_masks_clear_form_gui(dev);
   dt_masks_form_t *form_gui = _dup_masks_form(udata->form);
-  if (form_gui) dev->allforms = g_list_append(dev->allforms, form_gui);
+  if (form_gui)
+  {
+    dev->allforms = g_list_append(dev->allforms, form_gui);
+  }
   dt_masks_change_form_gui(form_gui);
 
   _masks_write_forms_db(dev, FALSE);
@@ -188,8 +181,11 @@ void _masks_do_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *ite
 
 static void _do_record_undo(dt_develop_t *dev, dt_masks_form_t *form)
 {
-  dt_undo_record(darktable.undo, dev, DT_UNDO_MASK, (dt_undo_data_t *)_create_snapshot(dev->forms, form, dev),
-                 _masks_do_undo, _masks_free_undo);
+  dt_undo_data_t *snapshot = NULL;
+  
+  snapshot = (dt_undo_data_t *)_create_snapshot(dev->forms, form, dev);
+  
+  dt_undo_record(darktable.undo, dev, DT_UNDO_MASK, snapshot, _masks_do_undo, _masks_free_undo);
 }
 
 static void _set_hinter_message(dt_masks_form_gui_t *gui, dt_masks_type_t formtype)
@@ -354,6 +350,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
   _check_id(form);
 
   dev->forms = g_list_append(dev->forms, form);
+
   if(gui) gui->creation = FALSE;
 
   guint nb = g_list_length(dev->forms);
@@ -387,7 +384,9 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
       snprintf(grp->name, sizeof(grp->name), "grp %s", module_label);
       g_free(module_label);
       _check_id(grp);
+
       dev->forms = g_list_append(dev->forms, grp);
+
       module->blend_params->mask_id = grpid = grp->formid;
     }
     // we add the form in this group
@@ -1990,6 +1989,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
     if(f->formid == id)
     {
       darktable.develop->forms = g_list_remove(darktable.develop->forms, f);
+      
       dt_masks_write_forms(darktable.develop);
       break;
     }

@@ -2877,7 +2877,7 @@ void dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelp
     /* we blend with a drawn and/or parametric mask */
 
     /* get the drawn mask if there is one */
-    dt_masks_form_t *form = dt_masks_dup_from_id_deep(self->dev, d->mask_id);
+    dt_masks_form_t *form = dt_masks_get_from_id(self->dev, d->mask_id);
 
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
@@ -2915,12 +2915,6 @@ void dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelp
       for(size_t i = 0; i < buffsize; i++) mask[i] = fill;
     }
 
-    if (form)
-    {
-      dt_masks_free_from_deep(form);
-      form = NULL;
-    }
-    
 #ifdef _OPENMP
 #pragma omp parallel for default(none)
 #endif
@@ -3137,7 +3131,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     /* we blend with a drawn and/or parametric mask */
 
     /* apply masks if there's some */
-    dt_masks_form_t *form = dt_masks_dup_from_id_deep(self->dev, d->mask_id);
+    dt_masks_form_t *form = dt_masks_get_from_id(self->dev, d->mask_id);
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
       dt_masks_group_render_roi(self, piece, form, roi_out, mask);
@@ -3174,12 +3168,6 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
       for(size_t i = 0; i < buffsize; i++) mask[i] = fill;
     }
 
-    if (form)
-    {
-      dt_masks_free_from_deep(form);
-      form = NULL;
-    }
-    
     /* write mask from host to device */
     err = dt_opencl_write_host_to_device(devid, mask, dev_mask, width, height, sizeof(float));
     if(err != CL_SUCCESS) goto error;

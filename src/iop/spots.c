@@ -256,7 +256,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   dt_develop_blend_params_t *bp = self->blend_params;
 
   // We iterate through all spots or polygons
-  dt_masks_form_t *grp = dt_masks_dup_from_id_deep(self->dev, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     GList *forms = g_list_first(grp->points);
@@ -293,7 +293,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
       forms = g_list_next(forms);
     }
   }
-  if (grp) dt_masks_free_from_deep(grp);
 
   // now we set the values
   const float scwidth = piece->buf_in.width * roi_in->scale, scheight = piece->buf_in.height * roi_in->scale;
