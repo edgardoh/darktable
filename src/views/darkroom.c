@@ -624,6 +624,15 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       free(module);
     }
   }
+/* Begin EFH */
+  // we also clear the saved modules
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
+  }
+/* End EFH */
   dt_dev_pixelpipe_create_nodes(dev->pipe, dev);
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
   dt_masks_read_forms(dev);
@@ -1852,6 +1861,14 @@ void leave(dt_view_t *self)
     free(module);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
   }
+/* Begin EFH */
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
+  }
+/* End EFH */
 
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
@@ -1861,6 +1878,9 @@ void leave(dt_view_t *self)
   // cleanup visible masks
   if(dev->form_gui)
   {
+/* Begin EFH */
+    dev->gui_module = NULL; // modules have already been free()
+/* End EFH */
     dt_masks_clear_form_gui(dev);
     free(dev->form_gui);
     dev->form_gui = NULL;
@@ -2185,6 +2205,13 @@ int key_released(dt_view_t *self, guint key, guint state)
     dt_dev_invalidate(darktable.develop);
     dt_control_queue_redraw_center();
   }
+/* Begin EFH */
+  // add an option to allow skip mouse events while editing masks
+  if(key == accels->darkroom_skip_mouse_events.accel_key && state == accels->darkroom_skip_mouse_events.accel_mods)
+  {
+    darktable.develop->darkroom_skip_mouse_events = FALSE;
+  }
+/* End EFH */
 
   return 1;
 }
@@ -2230,6 +2257,13 @@ int key_pressed(dt_view_t *self, guint key, guint state)
     else
       return 0;
   }
+/* Begin EFH */
+  // add an option to allow skip mouse events while editing masks
+  if(key == accels->darkroom_skip_mouse_events.accel_key && state == accels->darkroom_skip_mouse_events.accel_mods)
+  {
+    darktable.develop->darkroom_skip_mouse_events = TRUE;
+  }
+/* End EFH */
   return 1;
 }
 
@@ -2288,6 +2322,10 @@ void init_key_accels(dt_view_t *self)
   dt_accel_register_view(self, NC_("accel", "undo"), GDK_KEY_z, GDK_CONTROL_MASK);
   dt_accel_register_view(self, NC_("accel", "redo"), GDK_KEY_y, GDK_CONTROL_MASK);
 
+/* Begin EFH */
+  // add an option to allow skip mouse events while editing masks
+  dt_accel_register_view(self, NC_("accel", "allow to pan & zoom while editing masks"), GDK_KEY_a, 0);
+/* End EFH */
 }
 
 static gboolean _darkroom_undo_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,

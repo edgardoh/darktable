@@ -122,6 +122,8 @@ def add_edges(gr):
   gr.add_edge(('flip', 'rotatepixels'))
   gr.add_edge(('flip', 'lens'))
   gr.add_edge(('flip', 'spots'))
+#  gr.add_edge(('flip', 'retouch_eh'))
+  gr.add_edge(('flip', 'retouch2_eh'))
   gr.add_edge(('flip', 'liquify'))
   gr.add_edge(('flip', 'ashift'))
   
@@ -154,6 +156,8 @@ def add_edges(gr):
   gr.add_edge(('colorout', 'colormapping'))
   gr.add_edge(('colorout', 'atrous'))
   gr.add_edge(('colorout', 'bilat'))
+#  gr.add_edge(('colorout', 'loclap_lab_eh'))
+  gr.add_edge(('colorout', 'loclaplab_eh'))
   gr.add_edge(('colorout', 'colorzones'))
   gr.add_edge(('colorout', 'lowlight'))
   gr.add_edge(('colorout', 'monochrome'))
@@ -179,6 +183,8 @@ def add_edges(gr):
   gr.add_edge(('colormapping', 'colorin'))
   gr.add_edge(('atrous', 'colorin'))
   gr.add_edge(('bilat', 'colorin'))
+#  gr.add_edge(('loclap_lab_eh', 'colorin'))
+  gr.add_edge(('loclaplab_eh', 'colorin'))
   gr.add_edge(('colorzones', 'colorin'))
   gr.add_edge(('lowlight', 'colorin'))
   gr.add_edge(('monochrome', 'colorin'))
@@ -206,6 +212,8 @@ def add_edges(gr):
   gr.add_edge(('colormapping', 'colorreconstruction'))
   gr.add_edge(('atrous', 'colorreconstruction'))
   gr.add_edge(('bilat', 'colorreconstruction'))
+#  gr.add_edge(('loclap_lab_eh', 'colorreconstruction'))
+  gr.add_edge(('loclaplab_eh', 'colorreconstruction'))
   gr.add_edge(('colorzones', 'colorreconstruction'))
   gr.add_edge(('lowlight', 'colorreconstruction'))
   gr.add_edge(('monochrome', 'colorreconstruction'))
@@ -238,8 +246,29 @@ def add_edges(gr):
   gr.add_edge(('borders', 'spots'))
   gr.add_edge(('clipping', 'spots'))
 
+  # retouch works on demosaiced data
+  # and needs to be before geometric distortions:
+#  gr.add_edge(('retouch_eh', 'demosaic'))
+#  gr.add_edge(('scalepixels', 'retouch_eh'))
+#  gr.add_edge(('rotatepixels', 'retouch_eh'))
+#  gr.add_edge(('lens', 'retouch_eh'))
+#  gr.add_edge(('borders', 'retouch_eh'))
+#  gr.add_edge(('liqres_eh', 'retouch_eh'))
+#  gr.add_edge(('clipping', 'retouch_eh'))
+
+  # retouch works on demosaiced data
+  # and needs to be before geometric distortions:
+  gr.add_edge(('retouch2_eh', 'demosaic'))
+  gr.add_edge(('scalepixels', 'retouch2_eh'))
+  gr.add_edge(('rotatepixels', 'retouch2_eh'))
+  gr.add_edge(('lens', 'retouch2_eh'))
+  gr.add_edge(('borders', 'retouch2_eh'))
+  gr.add_edge(('clipping', 'retouch2_eh'))
+
   # liquify immediately after spot removal
   gr.add_edge(('liquify', 'spots'))
+#  gr.add_edge(('liquify', 'retouch_eh'))
+  gr.add_edge(('liquify', 'retouch2_eh'))
   gr.add_edge(('liquify', 'lens'))
   gr.add_edge(('rotatepixels', 'liquify'))
   gr.add_edge(('scalepixels', 'liquify'))
@@ -263,6 +292,8 @@ def add_edges(gr):
 
   # want to enhance detail/local contrast/sharpen denoised images:
   gr.add_edge(('bilat', 'nlmeans'))
+#  gr.add_edge(('loclap_lab_eh', 'nlmeans'))
+  gr.add_edge(('loclaplab_eh', 'nlmeans'))
   gr.add_edge(('atrous', 'nlmeans'))
   gr.add_edge(('sharpen', 'nlmeans'))
   gr.add_edge(('lowpass', 'nlmeans'))
@@ -373,6 +404,8 @@ def add_edges(gr):
   gr.add_edge(('shadhi', 'globaltonemap'))
   gr.add_edge(('zonesystem', 'globaltonemap'))
   gr.add_edge(('bilat', 'globaltonemap'))
+#  gr.add_edge(('loclap_lab_eh', 'globaltonemap'))
+  gr.add_edge(('loclaplab_eh', 'globaltonemap'))
 
   # want to fine-tune stuff after injection of color transfer:
   gr.add_edge(('atrous', 'colormapping'))
@@ -454,6 +487,8 @@ def add_edges(gr):
   gr.add_edge(('colormapping', 'colorchecker'))
   gr.add_edge(('atrous', 'colorchecker'))
   gr.add_edge(('bilat', 'colorchecker'))
+#  gr.add_edge(('loclap_lab_eh', 'colorchecker'))
+  gr.add_edge(('loclaplab_eh', 'colorchecker'))
   gr.add_edge(('colorzones', 'colorchecker'))
   gr.add_edge(('lowlight', 'colorchecker'))
   gr.add_edge(('monochrome', 'colorchecker'))
@@ -486,6 +521,8 @@ gr.add_nodes([
 'basecurve',
 'bilateral',
 'bilat',
+#'loclap_lab_eh',
+'loclaplab_eh',
 'bloom',
 'borders',
 'cacorrect',
@@ -540,6 +577,8 @@ gr.add_nodes([
 'soften',
 'splittoning',
 'spots',
+#'retouch_eh',
+'retouch2_eh',
 'temperature',
 'tonecurve',
 'tonemap',
