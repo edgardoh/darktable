@@ -264,7 +264,10 @@ int dt_masks_legacy_params(dt_develop_t *dev, void *params, const int old_versio
  */
 
 /** we create a completely new form. */
-dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
+/* Begin EFH masks_history */
+//dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
+dt_masks_form_t *dt_masks_create(dt_develop_t *dev, dt_masks_type_t type);
+/* End EFH masks_history */
 /* Begin EFH */
 /** retrieve a form from a list of forms with is id */
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);

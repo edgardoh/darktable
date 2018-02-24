@@ -52,8 +52,15 @@ static int dt_group_events_mouse_scrolled(struct dt_iop_module_t *module, float 
 
 static int dt_group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                           double pressure, int which, int type, uint32_t state,
-                                          dt_masks_form_t *form, dt_masks_form_gui_t *gui)
+/* Begin EFH masks_history */
+//                                          dt_masks_form_t *form, dt_masks_form_gui_t *gui)
+                                          dt_masks_form_t *form, dt_masks_form_gui_t *gui, int *modified)
+/* End EFH masks_history */
 {
+/* Begin EFH masks_history */
+  *modified = 0;
+  int rep = 0;
+/* End EFH masks_history */
   if(gui->group_edited != gui->group_selected)
   {
     // we set the selected form in edit mode
@@ -73,6 +80,8 @@ static int dt_group_events_button_pressed(struct dt_iop_module_t *module, float 
     // we get the form
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_edited);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+/* Begin EFH masks_history */
+/*
     if(!sel) return 0;
     if(sel->type & DT_MASKS_CIRCLE)
       return dt_circle_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
@@ -91,6 +100,26 @@ static int dt_group_events_button_pressed(struct dt_iop_module_t *module, float 
                                             fpt->parentid, gui, gui->group_edited);
   }
   return 0;
+*/
+    if(!sel) return rep;
+    if(sel->type & DT_MASKS_CIRCLE)
+      rep = dt_circle_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+                                             fpt->parentid, gui, gui->group_edited, modified);
+    else if(sel->type & DT_MASKS_PATH)
+      rep = dt_path_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel, fpt->parentid,
+                                           gui, gui->group_edited, modified);
+    else if(sel->type & DT_MASKS_GRADIENT)
+      rep = dt_gradient_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+                                               fpt->parentid, gui, gui->group_edited, modified);
+    else if(sel->type & DT_MASKS_ELLIPSE)
+      rep = dt_ellipse_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+                                              fpt->parentid, gui, gui->group_edited, modified);
+    else if(sel->type & DT_MASKS_BRUSH)
+      rep = dt_brush_events_button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+                                            fpt->parentid, gui, gui->group_edited, modified);
+  }
+  return rep;
+/* End EFH masks_history */
 }
 
 static int dt_group_events_button_released(struct dt_iop_module_t *module, float pzx, float pzy, int which,

@@ -110,6 +110,13 @@ typedef enum dt_signal_t
     */
   DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
 
+/* Begin EFH masks_history */
+  /** \brief This signal is raised when develop history is changed so history list can be refreshed
+  no param, no returned value
+    */
+  DT_SIGNAL_DEVELOP_REFRESH_HISTORY,
+
+/* End EFH masks_history */
   /** \brief This signal is raised when a module is removed from the history stack
     1 module
     no returned value

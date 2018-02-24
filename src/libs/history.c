@@ -28,6 +28,9 @@
 #include "gui/styles.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+/* Begin EFH masks_history */
+#include "develop/masks.h"
+/* End EFH masks_history */
 
 DT_MODULE(1)
 
@@ -192,11 +195,20 @@ static GList *_duplicate_history(GList *hist)
 
     memcpy(new, old, sizeof(dt_dev_history_item_t));
 
+/* Begin EFH masks_history */
+    if (old->module)
+    {
+/* End EFH masks_history */
     new->params = malloc(old->module->params_size);
     new->blend_params = malloc(sizeof(dt_develop_blend_params_t));
 
     memcpy(new->params, old->params, old->module->params_size);
     memcpy(new->blend_params, old->blend_params, sizeof(dt_develop_blend_params_t));
+/* Begin EFH masks_history */
+    }
+
+    if (old->forms) new->forms = dt_masks_dup_forms_deep(old->forms, NULL);
+/* End EFH masks_history */
 
     result = g_list_append(result, new);
 
@@ -276,7 +288,10 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *d
       dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)l->data;
 
       // this fixes the duplicate module when undo: hitem->multi_priority = 0;
-      if (hitem->module == NULL)
+/* Begin EFH masks_history */
+//      if (hitem->module == NULL)
+      if (hitem->module == NULL && hitem->hist_type == DT_DEV_HISTORY_TYPE_IOP)
+/* End EFH masks_history */
       {
         const dt_iop_module_t *base = get_base_module(darktable.develop, hitem->multi_name);
 
@@ -410,10 +425,21 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
     dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)(history->data);
 
     gchar *label;
+/* Begin EFH masks_history */
+    if (hitem->hist_type == DT_DEV_HISTORY_TYPE_IOP)
+    {
+/* End EFH masks_history */
     if(!hitem->multi_name[0] || strcmp(hitem->multi_name, "0") == 0)
       label = g_strdup_printf("%s", hitem->module->name());
     else
       label = g_strdup_printf("%s %s", hitem->module->name(), hitem->multi_name);
+/* Begin EFH masks_history */
+    }
+    else
+    {
+      label = g_strdup_printf("%s", dt_dev_history_mm_item_name_translated());
+    }
+/* End EFH masks_history */
 
     gboolean selected = (num == darktable.develop->history_end - 1);
     GtkWidget *widget = _lib_history_create_button(self, num, label, hitem->enabled, selected);
@@ -450,8 +476,20 @@ static void _lib_history_compress_clicked_callback(GtkWidget *widget, gpointer u
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
+/* Begin EFH masks_history */
+  // delete orphans masks 
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1 AND num "
+                                                             "NOT IN (SELECT num FROM main.history WHERE "
+                                                             "imgid = ?1)", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+/* End EFH masks_history */
   // load new history and write it back to ensure that all history are properly numbered without a gap
   dt_dev_reload_history_items(darktable.develop);
+/* Begin EFH masks_history */
+  dt_dev_compress_mask_history(darktable.develop);
+/* End EFH masks_history */
   dt_dev_write_history(darktable.develop);
 
   // then we can get the item to select in the new clean-up history retrieve the position of the module

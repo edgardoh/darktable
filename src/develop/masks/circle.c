@@ -67,7 +67,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
     {
       float masks_border;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         masks_border = dt_conf_get_float("plugins/darkroom/spots/circle_border");
       else
         masks_border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
@@ -77,7 +77,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
       else if(!up && masks_border < 1.0f)
         masks_border *= 1.0f / 0.97f;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         dt_conf_set_float("plugins/darkroom/spots/circle_border", masks_border);
       else
         dt_conf_set_float("plugins/darkroom/masks/circle/border", masks_border);
@@ -86,7 +86,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
     {
       float masks_size;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         masks_size = dt_conf_get_float("plugins/darkroom/spots/circle_size");
       else
         masks_size = dt_conf_get_float("plugins/darkroom/masks/circle/size");
@@ -96,7 +96,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
       else if(!up && masks_size < 1.0f)
         masks_size *= 1.0f / 0.97f;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         dt_conf_set_float("plugins/darkroom/spots/circle_size", masks_size);
       else
         dt_conf_set_float("plugins/darkroom/masks/circle/size", masks_size);
@@ -176,8 +176,14 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
 static int dt_circle_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                            double pressure, int which, int type, uint32_t state,
                                            dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
-                                           int index)
+/* Begin EFH masks_history */
+//                                           int index)
+                                           int index, int *modified)
+/* End EFH masks_history */
 {
+/* Begin EFH masks_history */
+  *modified = 0;
+/* End EFH masks_history */
   if(!gui) return 0;
   if(gui->source_selected && !gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
@@ -212,6 +218,9 @@ static int dt_circle_events_button_pressed(struct dt_iop_module_t *module, float
   }
   else if(gui->creation)
   {
+/* Begin EFH masks_history */
+    *modified = 1;
+/* End EFH masks_history */
     dt_iop_module_t *crea_module = gui->creation_module;
     // we create the circle
     dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
@@ -251,7 +260,9 @@ static int dt_circle_events_button_pressed(struct dt_iop_module_t *module, float
     if(crea_module)
     {
       // we save the move
-      dt_dev_add_history_item(darktable.develop, crea_module, TRUE);
+/* Begin EFH masks_history */
+//      dt_dev_add_history_item(darktable.develop, crea_module, TRUE);
+/* End EFH masks_history */
       // and we switch in edit mode to show all the forms
       dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
       dt_masks_iop_update(crea_module);
@@ -754,7 +765,10 @@ static int dt_circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_i
   }
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, 0, module->priority, points, l + 1))
+/* Begin EFH masks_history */
+//  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, 0, module->priority, points, l + 1))
+  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, 0, module->priority, points, l + 1))
+/* End EFH masks_history */
   {
     free(points);
     return 0;

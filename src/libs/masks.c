@@ -106,7 +106,10 @@ static void _lib_masks_inactivate_icons(dt_lib_module_t *self)
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_CIRCLE);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_CIRCLE);
+  dt_masks_form_t *spot = dt_masks_create(darktable.develop, DT_MASKS_CIRCLE);
+/* End EFH masks_history */
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;
@@ -119,6 +122,10 @@ static void _bt_add_circle(GtkWidget *widget, GdkEventButton *event, dt_lib_modu
 
   if(event->button == 1)
   {
+/* Begin EFH masks_history */
+    // we don't want an iop with the focus
+    dt_iop_request_focus(NULL);
+/* End EFH masks_history */
     // we unset the creation mode
     dt_masks_change_form_gui(NULL);
     _lib_masks_inactivate_icons(self);
@@ -128,7 +135,10 @@ static void _bt_add_circle(GtkWidget *widget, GdkEventButton *event, dt_lib_modu
 static void _tree_add_ellipse(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_ELLIPSE);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_ELLIPSE);
+  dt_masks_form_t *spot = dt_masks_create(darktable.develop, DT_MASKS_ELLIPSE);
+/* End EFH masks_history */
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;
@@ -141,6 +151,10 @@ static void _bt_add_ellipse(GtkWidget *widget, GdkEventButton *event, dt_lib_mod
 
   if(event->button == 1)
   {
+/* Begin EFH masks_history */
+    // we don't want an iop with the focus
+    dt_iop_request_focus(NULL);
+/* End EFH masks_history */
     // we unset the creation mode
     dt_masks_change_form_gui(NULL);
     _lib_masks_inactivate_icons(self);
@@ -150,7 +164,10 @@ static void _bt_add_ellipse(GtkWidget *widget, GdkEventButton *event, dt_lib_mod
 static void _tree_add_path(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_PATH);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_PATH);
+  dt_masks_form_t *spot = dt_masks_create(darktable.develop, DT_MASKS_PATH);
+/* End EFH masks_history */
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;
@@ -163,6 +180,10 @@ static void _bt_add_path(GtkWidget *widget, GdkEventButton *event, dt_lib_module
 
   if(event->button == 1)
   {
+/* Begin EFH masks_history */
+    // we don't want an iop with the focus
+    dt_iop_request_focus(NULL);
+/* End EFH masks_history */
     // we unset the creation mode
     dt_masks_change_form_gui(NULL);
     _lib_masks_inactivate_icons(self);
@@ -172,7 +193,10 @@ static void _bt_add_path(GtkWidget *widget, GdkEventButton *event, dt_lib_module
 static void _tree_add_gradient(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_GRADIENT);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_GRADIENT);
+  dt_masks_form_t *spot = dt_masks_create(darktable.develop, DT_MASKS_GRADIENT);
+/* End EFH masks_history */
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;
@@ -185,6 +209,10 @@ static void _bt_add_gradient(GtkWidget *widget, GdkEventButton *event, dt_lib_mo
 
   if(event->button == 1)
   {
+/* Begin EFH masks_history */
+    // we don't want an iop with the focus
+    dt_iop_request_focus(NULL);
+/* End EFH masks_history */
     // we unset the creation mode
     dt_masks_change_form_gui(NULL);
     _lib_masks_inactivate_icons(self);
@@ -194,7 +222,10 @@ static void _bt_add_gradient(GtkWidget *widget, GdkEventButton *event, dt_lib_mo
 static void _tree_add_brush(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_BRUSH);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_BRUSH);
+  dt_masks_form_t *spot = dt_masks_create(darktable.develop, DT_MASKS_BRUSH);
+/* End EFH masks_history */
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;
@@ -207,6 +238,10 @@ static void _bt_add_brush(GtkWidget *widget, GdkEventButton *event, dt_lib_modul
 
   if(event->button == 1)
   {
+/* Begin EFH masks_history */
+    // we don't want an iop with the focus
+    dt_iop_request_focus(NULL);
+/* End EFH masks_history */
     // we unset the creation mode
     dt_masks_change_form_gui(NULL);
     _lib_masks_inactivate_icons(self);
@@ -239,7 +274,10 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   // we create the new group
-  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create(darktable.develop, DT_MASKS_GROUP);
+/* End EFH masks_history */
   snprintf(grp->name, sizeof(grp->name), _("group #%d"), g_list_length(darktable.develop->forms));
 
   // we add all selected forms to this group
@@ -280,7 +318,10 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 
   // add we save
   dt_masks_write_forms(darktable.develop);
-  _lib_masks_recreate_list(self);
+/* Begin EFH masks_history */
+//  _lib_masks_recreate_list(self);
+  dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
   // dt_masks_change_form_gui(grp);
 }
 
@@ -317,8 +358,14 @@ static void _set_iter_name(dt_lib_masks_t *lm, dt_masks_form_t *form, int state,
 
 static void _tree_cleanup(GtkButton *button, dt_lib_module_t *self)
 {
+/* Begin EFH masks_history */
+  dt_masks_change_form_gui(NULL);
+/* End EFH masks_history */
   dt_masks_cleanup_unused(darktable.develop);
-  _lib_masks_recreate_list(self);
+/* Begin EFH masks_history */
+//  _lib_masks_recreate_list(self);
+  dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
 }
 
 static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
@@ -377,6 +424,12 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
   if(change)
   {
     dt_masks_write_forms(darktable.develop);
+/* Begin EFH masks_history */
+    const int gui_reset = lm->gui_reset;
+    lm->gui_reset = 1;
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+    lm->gui_reset = gui_reset;
+/* End EFH masks_history */
     dt_masks_update_image(darktable.develop);
     dt_control_queue_redraw_center();
   }
@@ -444,6 +497,12 @@ static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
   if(change)
   {
     dt_masks_write_forms(darktable.develop);
+/* Begin EFH masks_history */
+    const int gui_reset = lm->gui_reset;
+    lm->gui_reset = 1;
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+    lm->gui_reset = gui_reset;
+/* End EFH masks_history */
     dt_masks_update_image(darktable.develop);
     dt_control_queue_redraw_center();
   }
@@ -511,6 +570,12 @@ static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
   if(change)
   {
     dt_masks_write_forms(darktable.develop);
+/* Begin EFH masks_history */
+    const int gui_reset = lm->gui_reset;
+    lm->gui_reset = 1;
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+    lm->gui_reset = gui_reset;
+/* End EFH masks_history */
     dt_masks_update_image(darktable.develop);
     dt_control_queue_redraw_center();
   }
@@ -578,6 +643,12 @@ static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
   if(change)
   {
     dt_masks_write_forms(darktable.develop);
+/* Begin EFH masks_history */
+    const int gui_reset = lm->gui_reset;
+    lm->gui_reset = 1;
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+    lm->gui_reset = gui_reset;
+/* End EFH masks_history */
     dt_masks_update_image(darktable.develop);
     dt_control_queue_redraw_center();
   }
@@ -645,6 +716,12 @@ static void _tree_union(GtkButton *button, dt_lib_module_t *self)
   if(change)
   {
     dt_masks_write_forms(darktable.develop);
+/* Begin EFH masks_history */
+    const int gui_reset = lm->gui_reset;
+    lm->gui_reset = 1;
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+    lm->gui_reset = gui_reset;
+/* End EFH masks_history */
     dt_masks_update_image(darktable.develop);
     dt_control_queue_redraw_center();
   }
@@ -686,7 +763,10 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
     items = g_list_next(items);
   }
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+/* Begin EFH masks_history */
+//  _lib_masks_recreate_list(self);
+  dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
   dt_masks_update_image(darktable.develop);
 }
 
@@ -726,7 +806,10 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
     items = g_list_next(items);
   }
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+/* Begin EFH masks_history */
+//  _lib_masks_recreate_list(self);
+  dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
   dt_masks_update_image(darktable.develop);
 }
 static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
@@ -774,7 +857,10 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
     items = g_list_next(items);
   }
   lm->gui_reset = 0;
-  _lib_masks_recreate_list(self);
+/* Begin EFH masks_history */
+//  _lib_masks_recreate_list(self);
+  dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
 }
 static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
 {
@@ -798,6 +884,9 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
 
     int nid = dt_masks_form_duplicate(darktable.develop, id);
     if(nid <= 0) return;
+/* Begin EFH masks_history */
+    dt_dev_add_maks_history_item(darktable.develop, NULL, TRUE);
+/* End EFH masks_history */
     dt_dev_masks_list_change(darktable.develop);
     dt_dev_masks_selection_change(darktable.develop, nid, TRUE);
     //_lib_masks_recreate_list(self);
@@ -856,7 +945,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
 
   // else, we create a new form group with the selection and display it
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(self->treeview));
-  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create(darktable.develop, DT_MASKS_GROUP);
+/* End EFH masks_history */
   GList *items = g_list_first(gtk_tree_selection_get_selected_rows(selection, NULL));
   while(items)
   {
@@ -907,7 +999,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
     }
     items = g_list_next(items);
   }
-  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+/* Begin EFH masks_history */
+//  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp2 = dt_masks_create(darktable.develop, DT_MASKS_GROUP);
+/* End EFH masks_history */
   grp2->formid = 0;
   dt_masks_group_ungroup(grp2, grp);
   dt_masks_change_form_gui(grp2);
@@ -917,6 +1012,10 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
 
 static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_module_t *self)
 {
+/* Begin EFH masks_history */
+  // we don't want an iop with the focus
+  dt_iop_request_focus(NULL);
+/* End EFH masks_history */
   // dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   // we first need to adjust selection
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
@@ -1378,6 +1477,10 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   if(lm->gui_reset) return;
 
+/* Begin EFH masks_history */
+  const int gui_reset = lm->gui_reset;
+  lm->gui_reset = 1;
+/* End EFH masks_history */
   // if (lm->treeview) gtk_widget_destroy(lm->treeview);
 
   _lib_masks_inactivate_icons(self);
@@ -1408,6 +1511,9 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
 
   gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), GTK_TREE_MODEL(treestore));
   g_object_unref(treestore);
+/* Begin EFH masks_history */
+  lm->gui_reset = gui_reset;
+/* End EFH masks_history */
 }
 
 static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
@@ -1522,6 +1628,11 @@ static void _lib_masks_remove_item(dt_lib_module_t *self, int formid, int parent
 
 static void _lib_history_change_callback(gpointer instance, gpointer user_data)
 {
+/* Begin EFH masks_history */
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  if (self->gui_reset) return;
+  _lib_masks_recreate_list(self);
+/* End EFH masks_history */
   // dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   //_lib_masks_recreate_list(self);
 }
@@ -1725,7 +1836,10 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_show_all(self->widget);
 
   /* connect to history change signal for updating the history view */
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+/* Begin EFH masks_history */
+//  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+  dt_control_signal_connect(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY,
+/* End EFH masks_history */
                             G_CALLBACK(_lib_history_change_callback), self);
 
   // set proxy functions

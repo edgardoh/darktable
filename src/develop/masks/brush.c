@@ -1226,8 +1226,14 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
 static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                           double pressure, int which, int type, uint32_t state,
                                           dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
-                                          int index)
+/* Begin EFH masks_history */
+//                                          int index)
+                                          int index, int *modified)
+/* End EFH masks_history */
 {
+/* Begin EFH masks_history */
+  *modified = 0;
+/* End EFH masks_history */
   if(type == GDK_2BUTTON_PRESS || type == GDK_3BUTTON_PRESS) return 1;
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
@@ -1356,6 +1362,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
         dt_masks_gui_form_create(form, gui, index);
         // we save the move
         dt_masks_update_image(darktable.develop);
+/* Begin EFH masks_history */
+        *modified = 1;
+/* End EFH masks_history */
         return 1;
       }
       // we register the current position to avoid accidental move
@@ -1421,6 +1430,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
         gui->point_edited = gui->point_dragging = gui->point_selected = gui->seg_selected + 1;
         gui->seg_selected = -1;
         dt_control_queue_redraw_center();
+/* Begin EFH masks_history */
+        *modified = 1;
+/* End EFH masks_history */
       }
       else if(gui->seg_selected >= 0 && gui->seg_selected < nb - 1)
       {
@@ -1484,6 +1496,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
       dt_masks_form_remove(module, NULL, form);
       dt_dev_masks_list_change(darktable.develop);
       dt_control_queue_redraw_center();
+/* Begin EFH masks_history */
+      *modified = 1;
+/* End EFH masks_history */
       return 1;
     }
     dt_masks_point_brush_t *point
@@ -1500,6 +1515,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
     dt_masks_gui_form_create(form, gui, index);
     // we save the move
     dt_masks_update_image(darktable.develop);
+/* Begin EFH masks_history */
+    *modified = 1;
+/* End EFH masks_history */
 
     return 1;
   }
@@ -1519,6 +1537,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
       dt_masks_gui_form_create(form, gui, index);
       // we save the move
       dt_masks_update_image(darktable.develop);
+/* Begin EFH masks_history */
+      *modified = 1;
+/* End EFH masks_history */
     }
     return 1;
   }
@@ -1551,6 +1572,9 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
     // we remove the shape
     dt_dev_masks_list_remove(darktable.develop, form->formid, parentid);
     dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
+/* Begin EFH masks_history */
+    *modified = 1;
+/* End EFH masks_history */
     return 1;
   }
 

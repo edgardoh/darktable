@@ -353,7 +353,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
     {
       float rotation;
       
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse_rotation");
       else
         rotation = dt_conf_get_float("plugins/darkroom/masks/ellipse/rotation");
@@ -364,7 +364,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
         rotation += 10.f;
       rotation = fmodf(rotation, 360.0f);
 
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", rotation);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", rotation);
@@ -376,7 +376,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
       float radius_a;
       float radius_b;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
         flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
@@ -399,7 +399,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
       else return 1;
       masks_border = CLAMP(masks_border, 0.001f * reference, reference);
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         dt_conf_set_float("plugins/darkroom/spots/ellipse_border", masks_border);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/border", masks_border);
@@ -409,7 +409,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
       float radius_a;
       float radius_b;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
         radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
@@ -433,7 +433,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
       const float factor = radius_a / oldradius;
       radius_b *= factor;
 
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", radius_a);
         dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", radius_b);
@@ -480,7 +480,10 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
         dt_masks_write_form(form, darktable.develop);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
-        if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
           dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
         else
           dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
@@ -553,8 +556,14 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
 static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                             double pressure, int which, int type, uint32_t state,
                                             dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
-                                            int index)
+/* Begin EFH masks_history */
+//                                            int index)
+                                            int index, int *modified)
+/* End EFH masks_history */
 {
+/* Begin EFH masks_history */
+  *modified = 0;
+/* End EFH masks_history */
   if(!gui) return 0;
   if(gui->source_selected && !gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
@@ -614,6 +623,9 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
   }
   else if(gui->creation)
   {
+/* Begin EFH masks_history */
+    *modified = 1;
+/* End EFH masks_history */
     dt_iop_module_t *crea_module = gui->creation_module;
     // we create the ellipse
     dt_masks_point_ellipse_t *ellipse
@@ -656,8 +668,8 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
       }
       else
       {
-          // not used for regular masks
-          form->source[0] = form->source[1] = 0.0f;
+        // not used for regular masks
+        form->source[0] = form->source[1] = 0.0f;
       }
 /* End EFH */
     }
@@ -1112,7 +1124,7 @@ static void dt_ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_mask
       float radius_b;
       float rotation;
   
-      if(form->type & (DT_MASKS_CLONE/*|DT_MASKS_NON_CLONE*/)) // TODO: enable this when the option is created
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
         flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
@@ -1566,7 +1578,10 @@ static int dt_ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_
   }
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, 0, module->priority, points, l + 5))
+/* Begin EFH masks_history */
+//  if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, 0, module->priority, points, l + 5))
+  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, 0, module->priority, points, l + 5))
+/* End EFH masks_history */
   {
     free(points);
     return 0;

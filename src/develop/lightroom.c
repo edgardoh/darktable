@@ -341,8 +341,12 @@ static void dt_add_hist(int imgid, char *operation, dt_iop_params_t *params, int
   // add new history info
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "INSERT INTO main.history (imgid, num, module, operation, op_params, enabled, "
-                              "blendop_params, blendop_version, multi_priority, multi_name) "
-                              "VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, 0, ' ')",
+/* Begin EFH masks_history */
+//                              "blendop_params, blendop_version, multi_priority, multi_name) "
+//                              "VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, 0, ' ')",
+                              "blendop_params, blendop_version, multi_priority, multi_name, hist_type) "
+                              "VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, 0, ' ', ?8)",
+/* End EFH masks_history */
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
@@ -351,6 +355,9 @@ static void dt_add_hist(int imgid, char *operation, dt_iop_params_t *params, int
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 5, params, params_size, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, &blend_params, sizeof(dt_develop_blend_params_t), SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, LRDT_BLEND_VERSION);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);

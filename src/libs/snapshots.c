@@ -345,8 +345,19 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   {
     dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
                                                           darktable.develop->history_end - 1);
-    if(history_item && history_item->module)
-      name = history_item->module->name();
+/* Begin EFH masks_history */
+//    if(history_item && history_item->module)
+//      name = history_item->module->name();
+    if(history_item)
+    {
+      if(history_item->hist_type == DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+        name = dt_dev_history_mm_item_name_translated();
+      else if (history_item->module)
+        name = history_item->module->name();
+      else
+        name = _("unknown");
+    }
+/* End EFH masks_history */
     else
       name = _("unknown");
   }

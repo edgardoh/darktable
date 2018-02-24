@@ -170,6 +170,14 @@ void dt_history_delete_on_image(int32_t imgid)
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+/* End EFH masks_history */
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "UPDATE main.images SET history_end = 0 WHERE id = ?1", -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
@@ -267,6 +275,15 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
+/* Begin EFH masks_history */
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1 AND num >= (SELECT history_end "
+                                "FROM main.images WHERE id = imgid)", -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+/* End EFH masks_history */
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "SELECT IFNULL(MAX(num), -1)+1 FROM main.history WHERE imgid = ?1",
                                 -1, &stmt, NULL);
@@ -280,6 +297,14 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
                                 &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
     sqlite3_step(stmt);
+/* Begin EFH masks_history */
+    sqlite3_finalize(stmt);
+
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                                &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+    sqlite3_step(stmt);
+/* End EFH masks_history */
   }
   sqlite3_finalize(stmt);
 
@@ -289,11 +314,17 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
   /* copy history items from styles onto temp table */
 
   //  prepare SQL request
+/* Begin EFH masks_history */
+  // copy only IOP history
+/* End EFH masks_history */
   char req[2048];
   g_strlcpy(req, "INSERT INTO memory.style_items (num, module, operation, op_params, enabled, blendop_params, "
                  "blendop_version, multi_name, multi_priority) SELECT num, module, operation, "
                  "op_params, enabled, blendop_params, blendop_version, multi_name, multi_priority FROM "
-                 "main.history WHERE imgid = ?1",
+/* Begin EFH masks_history */
+//                 "main.history WHERE imgid = ?1",
+                 "main.history WHERE imgid = ?1 AND hist_type = ?2",
+/* End EFH masks_history */
             sizeof(req));
 
   //  Add ops selection if any format: ... and num in (val1, val2)
@@ -319,9 +350,14 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), req, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
+/* Begin EFH masks_history */
+#if 0
   /* copy the history items into the history of the dest image */
   /* note: rowid starts at 1 while num has to start at 0! */
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -337,8 +373,13 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
   sqlite3_finalize(stmt);
 
   if(merge && ops) _dt_history_cleanup_multi_instance(dest_imgid, offs);
+#endif
+/* End EFH masks_history */
 
   // we have to copy masks too
+/* Begin EFH masks_history */
+  // copy masks first so we can create a mask manager entry with all existing masks
+/* End EFH masks_history */
   // what to do with existing masks ?
   if(merge)
   {
@@ -365,6 +406,65 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+/* Begin EFH masks_history */
+
+  // add first a mask manager entry in history with all the masks
+  int masks_count = 0;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT COUNT(*) FROM main.mask WHERE imgid = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW) masks_count = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  
+  if (masks_count > 0)
+  {
+    // add a mask manager entry in history
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "INSERT INTO main.history "
+                                "(imgid,num,module,operation,op_params,enabled,blendop_params,blendop_"
+                                "version,multi_priority,multi_name,hist_type) VALUES ( "
+                                "?1,?2,0,?3,NULL,1,NULL,0,0,?4,?5)",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, offs);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, dt_dev_history_mm_item_name(), -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, dt_dev_history_mm_item_name(), -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, DT_DEV_HISTORY_TYPE_MASK_MANAGER);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    // copy all the forms
+    g_strlcpy(req, "INSERT INTO main.masks_history (imgid, num, formid, form, name, version, points, points_count, source) SELECT "
+                   "?1, ?2, formid, form, name, version, points, points_count, source FROM main.mask WHERE imgid = ?3",
+              sizeof(req));
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), req, -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, offs);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, dest_imgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    offs++;
+  }
+  
+  /* copy the history items into the history of the dest image */
+  /* note: rowid starts at 1 while num has to start at 0! */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "INSERT INTO main.history "
+                              "(imgid,num,module,operation,op_params,enabled,blendop_params,blendop_"
+                              "version,multi_priority,multi_name,hist_type) SELECT "
+                              "?1,?2+rowid-1,module,operation,op_params,enabled,blendop_params,blendop_"
+                              "version,multi_priority,multi_name,?3 FROM memory.style_items",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, offs);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_DEV_HISTORY_TYPE_IOP);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  if(merge && ops) _dt_history_cleanup_multi_instance(dest_imgid, offs);
+/* End EFH masks_history */
 
   // always make the whole stack active
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -398,9 +498,15 @@ GList *dt_history_get_items(int32_t imgid, gboolean enabled)
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT num, operation, enabled, multi_name FROM main.history WHERE imgid=?1 AND "
                               "num IN (SELECT MAX(num) FROM main.history hst2 WHERE hst2.imgid=?1 AND "
-                              "hst2.operation=main.history.operation GROUP BY multi_priority) ORDER BY num DESC",
+/* Begin EFH masks_history */
+//                              "hst2.operation=main.history.operation GROUP BY multi_priority) ORDER BY num DESC",
+                              "hst2.operation=main.history.operation AND hist_type=?2 GROUP BY multi_priority) ORDER BY num DESC",
+/* End EFH masks_history */
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     char name[512] = { 0 };
@@ -450,8 +556,14 @@ char *dt_history_get_items_as_string(int32_t imgid)
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(
       dt_database_get(darktable.db),
-      "SELECT operation, enabled, multi_name FROM main.history WHERE imgid=?1 ORDER BY num DESC", -1, &stmt, NULL);
+/* Begin EFH masks_history */
+//      "SELECT operation, enabled, multi_name FROM main.history WHERE imgid=?1 ORDER BY num DESC", -1, &stmt, NULL);
+      "SELECT operation, enabled, multi_name FROM main.history WHERE imgid=?1 AND hist_type=?2 ORDER BY num DESC", -1, &stmt, NULL);
+/* End EFH masks_history */
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
 
   // collect all the entries in the history from the db
   while(sqlite3_step(stmt) == SQLITE_ROW)

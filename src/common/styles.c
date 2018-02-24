@@ -531,6 +531,14 @@ void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgi
 
     /* merge onto history stack, let's find history offest in destination image */
     /* first trim the stack to get rid of whatever is above the selected entry */
+/* Begin EFH masks_history */
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1 AND num >= (SELECT history_end "
+                                "FROM main.images WHERE id = imgid)", -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newimgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+/* End EFH masks_history */
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "DELETE FROM main.history WHERE imgid = ?1 AND num >= (SELECT history_end "
                                 "FROM main.images WHERE id = imgid)", -1, &stmt, NULL);
@@ -562,12 +570,21 @@ void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgi
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                 "INSERT INTO main.history "
                                 "(imgid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                                "version,multi_priority,multi_name) SELECT "
+/* Begin EFH masks_history */
+//                                "version,multi_priority,multi_name) SELECT "
+                                "version,multi_priority,multi_name,hist_type) SELECT "
+/* End EFH masks_history */
                                 "?1,?2+rowid,module,operation,op_params,enabled,blendop_params,blendop_"
-                                "version,multi_priority,multi_name FROM memory.style_items",
+/* Begin EFH masks_history */
+//                                "version,multi_priority,multi_name FROM memory.style_items",
+                                "version,multi_priority,multi_name,?3 FROM memory.style_items",
+/* End EFH masks_history */
                                 -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newimgid);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, offs);
+/* Begin EFH masks_history */
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
