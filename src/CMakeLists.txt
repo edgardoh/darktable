@@ -294,7 +294,7 @@ if(USE_WEBP)
   else(USE_WEBP)
 endif(USE_WEBP)
 
-foreach(lib ${OUR_LIBS} LensFun GIO GThread GModule PangoCairo Rsvg2 LibXml2 Sqlite3 CURL PNG JPEG TIFF LCMS2 JsonGlib gmic)
+foreach(lib ${OUR_LIBS} LensFun GIO GThread GModule PangoCairo Rsvg2 LibXml2 Sqlite3 CURL PNG JPEG TIFF LCMS2 JsonGlib gmic fftw3 fftw3_omp)
   find_package(${lib} REQUIRED)
   include_directories(SYSTEM ${${lib}_INCLUDE_DIRS})
   list(APPEND LIBS ${${lib}_LIBRARIES})
@@ -390,6 +390,24 @@ if(USE_GMIC)
   endif(GMIC_FOUND)
 endif(USE_GMIC)
 
+if(USE_FFTW3)
+  find_package(fftw3)
+  if(FFTW3_FOUND)
+    add_definitions(-DHAVE_FFTW3)
+    include_directories(SYSTEM ${FFTW3_INCLUDE_DIRS})
+    list(APPEND LIBS ${FFTW3_LIBRARIES})
+  endif(FFTW3_FOUND)
+endif(USE_FFTW3)
+
+if(USE_FFTW3_OMP)
+  find_package(fftw3_omp)
+  if(FFTW3_OMP_FOUND)
+    add_definitions(-DHAVE_FFTW3_OMP)
+    include_directories(SYSTEM ${FFTW3_OMP_INCLUDE_DIRS})
+    list(APPEND LIBS ${FFTW3_OMP_LIBRARIES})
+  endif(FFTW3_OMP_FOUND)
+endif(USE_FFTW3_OMP)
+
 #
 # Add HAVE_xxx defines used by darktable
 #
@@ -410,6 +428,14 @@ endif(USE_OPENCL)
 if(GMIC_FOUND)
   add_definitions("-DHAVE_GMIC")
 endif(GMIC_FOUND)
+
+if(FFTW3_FOUND)
+  add_definitions("-DHAVE_FFTW3")
+endif(FFTW3_FOUND)
+
+if(FFTW3_OMP_FOUND)
+  add_definitions("-DHAVE_FFTW3_OMP")
+endif(FFTW3_OMP_FOUND)
 
 if(GPHOTO2_FOUND)
   set(SOURCES ${SOURCES} "common/camera_control.c" "control/jobs/camera_jobs.c" "gui/camera_import_dialog.c" )

@@ -77,6 +77,8 @@ option(BUILD_RS_IDENTIFY "Build the darktable-rs-identify debug aid" ON)
 option(BUILD_SSE2_CODEPATHS "(EXPERIMENTAL OPTION, DO NOT DISABLE) Building SSE2-optimized codepaths" ON)
 option(VALIDATE_APPDATA_FILE "Use appstream-util (if found) to validate the .appdata file" OFF)
 option(USE_GMIC "Enable GMIC support" ON)
+option(USE_FFTW3 "Enable fftw3 support" ON)
+option(USE_FFTW3_OMP "Enable fftw3_omp support" ON)
 option(BUILD_TESTS "Build tests in src/tests/, runnable from the build/ directory" OFF)
 
 if(USE_OPENCL)
