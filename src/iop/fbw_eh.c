@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
 /*
    based on G'MIC filter "Freaky B&W"
    http://gmic.eu/
