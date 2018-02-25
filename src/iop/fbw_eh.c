@@ -1007,12 +1007,12 @@ static void estimate_laplacian(float *img_grx, float *img_gry, float *img_grn, f
     }
   }
 */
-  
+
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) shared(img_bp, img_grn, img_dest) schedule(static)
 #endif
-  for (int i = 0; i < stride; i++)
+  for(int i = 0; i < stride; i++)
   {
     img_dest[i] -= (beta * img_bp[i]);
   }
@@ -1020,8 +1020,6 @@ static void estimate_laplacian(float *img_grx, float *img_gry, float *img_grn, f
 cleanup:
   
   if (img_bp) dt_free_align(img_bp);
-  
-
 }
 
 static void recontruct_laplacian(float *img_src, float *img_grn, float *img_dest, const int width, const int height, 
