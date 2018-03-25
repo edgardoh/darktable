@@ -179,11 +179,274 @@ static void dt_ellipse_get_distance(float x, int y, float as, dt_masks_form_gui_
   if(dt_ellipse_point_close_to_path(x, y, as, gpt->points + 10, gpt->points_count - 5)) *near = 1;
 }
 
+/* Begin EFH */
+static void dt_ellipse_draw_shape(cairo_t *cr, double *dashed, const int selected, const float zoom_scale, 
+                                  const float dx, const float dy,
+                                  const float xref, const float yref,
+                                  const float sinv, const float cosv,
+                                  const float scalea, const float scaleb,
+                                  float *points, const int points_count)
+{
+  if(points_count <= 10) return;
+  
+  const float r = atan2(points[3] - points[1], points[2] - points[0]);
+  const float sinr = sin(r);
+  const float cosr = cos(r);
+
+  float x = 0.f;
+  float y = 0.f;
+  
+  cairo_set_dash(cr, dashed, 0, 0);
+  if(selected)
+    cairo_set_line_width(cr, 5.0 / zoom_scale);
+  else
+    cairo_set_line_width(cr, 3.0 / zoom_scale);
+  cairo_set_source_rgba(cr, .3, .3, .3, .8);
+
+  _ellipse_point_transform(xref, yref, points[10] + dx, points[11] + dy, sinr, cosr, scalea,
+                           scaleb, sinv, cosv, &x, &y);
+  cairo_move_to(cr, x, y);
+  for(int i = 6; i < points_count; i++)
+  {
+    _ellipse_point_transform(xref, yref, points[i * 2] + dx, points[i * 2 + 1] + dy, sinr, cosr,
+                             scalea, scaleb, sinv, cosv, &x, &y);
+    cairo_line_to(cr, x, y);
+  }
+  _ellipse_point_transform(xref, yref, points[10] + dx, points[11] + dy, sinr, cosr, scalea,
+                           scaleb, sinv, cosv, &x, &y);
+  cairo_line_to(cr, x, y);
+  cairo_stroke_preserve(cr);
+  if(selected)
+    cairo_set_line_width(cr, 2.0 / zoom_scale);
+  else
+    cairo_set_line_width(cr, 1.0 / zoom_scale);
+  cairo_set_source_rgba(cr, .8, .8, .8, .8);
+  cairo_stroke(cr);
+}
+
+static void dt_ellipse_draw_border(cairo_t *cr, double *dashed, const float len, const int selected, const float zoom_scale, 
+                                  const float dx, const float dy,
+                                  const float xref, const float yref,
+                                  const float sinv, const float cosv,
+                                  const float scaleab, const float scalebb,
+                                  float *border, const int border_count)
+{
+  if(border_count <= 10) return;
+  
+  const float r = atan2(border[3] - border[1], border[2] - border[0]);
+  const float sinr = sin(r);
+  const float cosr = cos(r);
+
+  float x = 0.f;
+  float y = 0.f;
+  
+  cairo_set_dash(cr, dashed, len, 0);
+  if(selected)
+    cairo_set_line_width(cr, 2.0 / zoom_scale);
+  else
+    cairo_set_line_width(cr, 1.0 / zoom_scale);
+  cairo_set_source_rgba(cr, .3, .3, .3, .8);
+
+  _ellipse_point_transform(xref, yref, border[10] + dx, border[11] + dy, sinr, cosr, scaleab,
+                           scalebb, sinv, cosv, &x, &y);
+  cairo_move_to(cr, x, y);
+  for(int i = 6; i < border_count; i++)
+  {
+    _ellipse_point_transform(xref, yref, border[i * 2] + dx, border[i * 2 + 1] + dy, sinr, cosr,
+                             scaleab, scalebb, sinv, cosv, &x, &y);
+    cairo_line_to(cr, x, y);
+  }
+  _ellipse_point_transform(xref, yref, border[10] + dx, border[11] + dy, sinr, cosr, scaleab,
+                           scalebb, sinv, cosv, &x, &y);
+  cairo_line_to(cr, x, y);
+
+  cairo_stroke_preserve(cr);
+  if(selected)
+    cairo_set_line_width(cr, 2.0 / zoom_scale);
+  else
+    cairo_set_line_width(cr, 1.0 / zoom_scale);
+  cairo_set_source_rgba(cr, .8, .8, .8, .8);
+  cairo_set_dash(cr, dashed, len, 4);
+  cairo_stroke(cr);
+}
+
+static int dt_ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
+                                 float rotation, float **points, int *points_count)
+{
+  const float wd = dev->preview_pipe->iwidth;
+  const float ht = dev->preview_pipe->iheight;
+  const float v1 = (rotation / 180.0f) * M_PI;
+  const float v2 = (rotation - 90.0f) / 180.0f * M_PI;
+  float a, b, v;
+
+  if(radius_a >= radius_b)
+  {
+    a = radius_a * MIN(wd, ht);
+    b = radius_b * MIN(wd, ht);
+    v = v1;
+  }
+  else
+  {
+    a = radius_b * MIN(wd, ht);
+    b = radius_a * MIN(wd, ht);
+    v = v2;
+  }
+
+  const float sinv = sinf(v);
+  const float cosv = cosf(v);
+
+
+  // how many points do we need? we only take every nth point and rely on interpolation (only affecting GUI
+  // anyhow)
+  const int n = 10;
+  const float lambda = (a - b) / (a + b);
+  const int l = MAX(
+      100, (int)((M_PI * (a + b)
+                  * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda)))) / n));
+
+  // buffer allocations
+  *points = calloc(2 * (l + 5), sizeof(float));
+  *points_count = l + 5;
+
+  // now we set the points
+  const float x = (*points)[0] = xx * wd;
+  const float y = (*points)[1] = yy * ht;
+
+  (*points)[2] = x + a * cos(v);
+  (*points)[3] = y + a * sin(v);
+  (*points)[4] = x - a * cos(v);
+  (*points)[5] = y - a * sin(v);
+
+  (*points)[6] = x + b * cos(v - M_PI / 2.0f);
+  (*points)[7] = y + b * sin(v - M_PI / 2.0f);
+  (*points)[8] = x - b * cos(v - M_PI / 2.0f);
+  (*points)[9] = y - b * sin(v - M_PI / 2.0f);
+
+
+  for(int i = 5; i < l + 5; i++)
+  {
+    float alpha = (i - 5) * 2.0 * M_PI / (float)l;
+    (*points)[i * 2] = x + a * cosf(alpha) * cosv - b * sinf(alpha) * sinv;
+    (*points)[i * 2 + 1] = y + a * cosf(alpha) * sinv + b * sinf(alpha) * cosv;
+  }
+
+  // and we transform them with all distorted modules
+  if(dt_dev_distort_transform(dev, *points, l + 5)) return 1;
+
+  // if we failed, then free all and return
+  free(*points);
+  *points = NULL;
+  *points_count = 0;
+  return 0;
+}
+/* End EFH */
 
 static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                             uint32_t state, dt_masks_form_t *form, int parentid,
                                             dt_masks_form_gui_t *gui, int index)
 {
+/* Begin EFH */
+  // add a preview when creating an ellipse
+  if(gui->creation)
+  {
+    if((state & (GDK_SHIFT_MASK|GDK_CONTROL_MASK)) == (GDK_SHIFT_MASK|GDK_CONTROL_MASK))
+    {
+      float rotation;
+      
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+        rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse_rotation");
+      else
+        rotation = dt_conf_get_float("plugins/darkroom/masks/ellipse/rotation");
+
+      if(up)
+        rotation -= 10.f;
+      else
+        rotation += 10.f;
+      rotation = fmodf(rotation, 360.0f);
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+        dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", rotation);
+      else
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", rotation);
+    }
+    else if((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
+    {
+      float masks_border;
+      int flags;
+      float radius_a;
+      float radius_b;
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
+        flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
+        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
+      }
+      else
+      {
+        masks_border = dt_conf_get_float("plugins/darkroom/masks/ellipse/border");
+        flags = dt_conf_get_int("plugins/darkroom/masks/ellipse/flags");
+        radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
+      }
+
+      const float reference = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? 1.0f/fmin(radius_a, radius_b) : 1.0f);
+      if(up && masks_border > 0.001f * reference)
+        masks_border *= 0.97f;
+      else if(!up && masks_border < 1.0f * reference)
+        masks_border *= 1.0f/0.97f;
+      else return 1;
+      masks_border = CLAMP(masks_border, 0.001f * reference, reference);
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+        dt_conf_set_float("plugins/darkroom/spots/ellipse_border", masks_border);
+      else
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/border", masks_border);
+    }
+    else if (state == 0)
+    {
+      float radius_a;
+      float radius_b;
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
+      }
+      else
+      {
+        radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
+      }
+
+      const float oldradius = radius_a;
+
+      if(up && radius_a > 0.001f)
+        radius_a *= 0.97f;
+      else if(!up && radius_a < 1.0f)
+        radius_a *= 1.0f / 0.97f;
+      else return 1;
+
+      radius_a = CLAMP(radius_a, 0.001f, 1.0f);
+
+      const float factor = radius_a / oldradius;
+      radius_b *= factor;
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", radius_a);
+        dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", radius_b);
+      }
+      else
+      {
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", radius_a);
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", radius_b);
+      }
+    }
+    return 1;
+  }
+/* End EFH */
   if(gui->form_selected)
   {
     // we register the current position
@@ -192,7 +455,10 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
       gui->scrollx = pzx;
       gui->scrolly = pzy;
     }
-    if((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)
+/* Begin EFH */
+//    if((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)
+    if((state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK && !((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK))
+/* End EFH */
     {
       // we try to change the opacity
       dt_masks_form_change_opacity(form, parentid, up);
@@ -200,7 +466,31 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
     else
     {
       dt_masks_point_ellipse_t *ellipse = (dt_masks_point_ellipse_t *)(g_list_first(form->points)->data);
-      if(gui->border_selected || (state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
+/* Begin EFH */
+//      if(gui->border_selected || (state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
+      if((state & (GDK_SHIFT_MASK|GDK_CONTROL_MASK)) == (GDK_SHIFT_MASK|GDK_CONTROL_MASK) && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      {
+        // we try to change the rotation
+        if(up)
+          ellipse->rotation -= 10.f;
+        else
+          ellipse->rotation += 10.f;
+        ellipse->rotation = fmodf(ellipse->rotation, 360.0f);
+
+        dt_masks_write_form(form, darktable.develop);
+        dt_masks_gui_form_remove(form, gui, index);
+        dt_masks_gui_form_create(form, gui, index);
+/* Begin EFH */
+//        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
+          dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
+        else
+          dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
+      }
+      // resize don't care where the mouse is inside a shape
+      else if (((state & GDK_SHIFT_MASK) == GDK_SHIFT_MASK) && (gui->border_selected || gui->edit_mode == DT_MASKS_EDIT_FULL) )
+/* End EFH */
       {
         const float reference = (ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? 1.0f/fmin(ellipse->radius[0], ellipse->radius[1]) : 1.0f);
         if(up && ellipse->border > 0.001f * reference)
@@ -212,7 +502,10 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
         dt_masks_write_form(form, darktable.develop);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
-        if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
           dt_conf_set_float("plugins/darkroom/spots/ellipse_border", ellipse->border);
         else
           dt_conf_set_float("plugins/darkroom/masks/ellipse/border", ellipse->border);
@@ -235,7 +528,10 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
         dt_masks_write_form(form, darktable.develop);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
-        if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
         {
           dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", ellipse->radius[0]);
           dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", ellipse->radius[1]);
@@ -334,7 +630,10 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
     ellipse->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
     ellipse->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
 
-    if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//    if(form->type & DT_MASKS_CLONE)
+    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
     {
       const float a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
       const float b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
@@ -348,8 +647,22 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
       const float min_radius = fmin(ellipse->radius[0], ellipse->radius[1]);
       const float reference = (ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? 1.0f/min_radius : 1.0f);
       ellipse->border = MAX(0.005f * reference, MIN(0.5f * reference, ellipse_border));
+/* Begin EFH */
+/*
       form->source[0] = ellipse->center[0] + 0.02f;
       form->source[1] = ellipse->center[1] + 0.02f;
+*/
+      if(form->type & DT_MASKS_CLONE)
+      {
+        form->source[0] = ellipse->center[0] + 0.02f;
+        form->source[1] = ellipse->center[1] + 0.02f;
+      }
+      else
+      {
+        // not used for regular masks
+        form->source[0] = form->source[1] = 0.0f;
+      }
+/* End EFH */
     }
     else
     {
@@ -387,7 +700,10 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
     }
 
     // if we draw a clone ellipse, we start now the source dragging
-    if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//    if(form->type & DT_MASKS_CLONE)
+    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
     {
       dt_masks_form_t *grp = darktable.develop->form_visible;
       if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
@@ -407,7 +723,13 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
       if(pos2 < 0) return 1;
       dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
       if(!gui2) return 1;
-      gui2->source_dragging = TRUE;
+/* Begin EFH */
+//      gui2->source_dragging = TRUE;
+      if(form->type & DT_MASKS_CLONE)
+        gui2->source_dragging = TRUE;
+      else
+        gui2->form_dragging = TRUE;
+/* End EFH */
       gui2->group_edited = gui2->group_selected = pos2;
       gui2->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
       gui2->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -415,6 +737,11 @@ static int dt_ellipse_events_button_pressed(struct dt_iop_module_t *module, floa
       gui2->dy = 0.0;
       gui2->scrollx = pzx;
       gui2->scrolly = pzy;
+/* Begin EFH */
+      gui2->form_selected = TRUE; // we also want to be selected after button released
+      
+      dt_masks_select_form(module, dt_masks_get_from_id(darktable.develop, form->formid));
+/* End EFH */
     }
     return 1;
   }
@@ -509,7 +836,10 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
       ellipse->flags |= DT_MASKS_ELLIPSE_PROPORTIONAL;
     }
 
-    if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//    if(form->type & DT_MASKS_CLONE)
+    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
     {
       dt_conf_set_int("plugins/darkroom/spots/ellipse_flags", ellipse->flags);
       dt_conf_set_float("plugins/darkroom/spots/ellipse_border", ellipse->border);
@@ -556,7 +886,10 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
     ellipse->rotation += dv / M_PI * 180.0f;
     ellipse->rotation = fmodf(ellipse->rotation, 360.0f);
 
-    if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//    if(form->type & DT_MASKS_CLONE)
+    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
       dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
     else
       dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
@@ -602,7 +935,10 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
        || ((k == 3 || k == 4) && ellipse->radius[0] <= ellipse->radius[1]))
     {
       ellipse->radius[0] = MAX(0.002f, ellipse->radius[0] * s);
-      if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
         dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", ellipse->radius[0]);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
@@ -610,7 +946,10 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
     else
     {
       ellipse->radius[1] = MAX(0.002f, ellipse->radius[1] * s);
-      if(form->type & DT_MASKS_CLONE)
+/* Begin EFH */
+//      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+/* End EFH */
         dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", ellipse->radius[1]);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
@@ -730,6 +1069,17 @@ static int dt_ellipse_events_mouse_moved(struct dt_iop_module_t *module, float p
     dt_control_queue_redraw_center();
     if(!gui->form_selected && !gui->border_selected) return 0;
     if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
+/* Begin EFH */
+    return 1;
+  }
+  // add a preview when creating an ellipse
+  else if(gui->creation)
+  {
+    gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
+    gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
+    
+    dt_control_queue_redraw_center();
+/* End EFH */
     return 1;
   }
 
@@ -743,16 +1093,125 @@ static void dt_ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_mask
   dashed[1] /= zoom_scale;
   int len = sizeof(dashed) / sizeof(dashed[0]);
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+/* Begin EFH */
+  float dx = 0.0f, dy = 0.0f, xref = 0.0f, yref = 0.0f;
+  float dxs = 0.0f, dys = 0.0f, xrefs = 0.0f, yrefs = 0.0f;
+  float sinv = 0.0f, cosv = 1.0f;
+  float scalea = 1.0f, scaleb = 1.0f, scaleab = 1.0f, scalebb = 1.0f;
+
+  // add a preview when creating an ellipse
+  // in creation mode
+  if(gui->creation)
+  {
+    if(gui->guipoints_count == 0)
+    {
+      dt_masks_form_t *form = darktable.develop->form_visible;
+      if(!form) return;
+
+      float x, y;
+      float masks_border;
+      int flags;
+      float radius_a;
+      float radius_b;
+      float rotation;
+  
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
+        flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
+        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
+        rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse_rotation");
+      }
+      else
+      {
+        masks_border = dt_conf_get_float("plugins/darkroom/masks/ellipse/border");
+        flags = dt_conf_get_int("plugins/darkroom/masks/ellipse/flags");
+        radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
+        rotation = dt_conf_get_float("plugins/darkroom/masks/ellipse/rotation");
+      }
+
+      float pzx = gui->posx;
+      float pzy = gui->posy;
+      
+      if(pzx == 0 && pzy == 0)
+      {
+        float zoom_x, zoom_y;
+        zoom_y = dt_control_get_dev_zoom_y();
+        zoom_x = dt_control_get_dev_zoom_x();
+        pzx = (.5f + zoom_x) * darktable.develop->preview_pipe->backbuf_width;
+        pzy = (.5f + zoom_y) * darktable.develop->preview_pipe->backbuf_height;
+      }
+      
+      float pts[2] = { pzx, pzy };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      x = pts[0] / darktable.develop->preview_pipe->iwidth;
+      y = pts[1] / darktable.develop->preview_pipe->iheight;
+  
+      float *points = NULL;
+      int points_count = 0;
+      float *border = NULL;
+      int border_count = 0;
+      
+      int draw = 0;
+      
+      draw = dt_ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
+      if (draw && masks_border > 0.f)
+      {
+        draw = dt_ellipse_get_points(darktable.develop, x, y,
+            (flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? radius_a * (1.0f + masks_border) : radius_a + masks_border),
+            (flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? radius_b * (1.0f + masks_border) : radius_b + masks_border),
+            rotation, &border, &border_count);
+      }
+    
+      if (draw && points_count >= 2)
+      {
+        xref = points[0];
+        yref = points[1];
+        
+        dt_ellipse_draw_shape(cr, dashed, 0, zoom_scale, 
+            dx, dy, 
+            xref, yref,
+            sinv, cosv,
+            scalea, scaleb,
+            points, points_count);
+      }
+      if (draw && border_count >= 2)
+      {
+        xref = border[0];
+        yref = border[1];
+        
+        dt_ellipse_draw_border(cr, dashed, len, 0, zoom_scale, 
+            dx, dy, 
+            xref, yref,
+            sinv, cosv,
+            scaleab, scalebb,
+            border, border_count);
+      }
+      
+      if (points) free(points);
+      if (border) free(border);
+    }
+    return;
+  }
+/* End EFH */
   if(!gpt) return;
 
   const float r = atan2(gpt->points[3] - gpt->points[1], gpt->points[2] - gpt->points[0]);
   const float sinr = sin(r);
   const float cosr = cos(r);
 
+/* Begin EFH */
+/*
   float dx = 0.0f, dy = 0.0f, xref = gpt->points[0], yref = gpt->points[1];
   float dxs = 0.0f, dys = 0.0f, xrefs = 0.0f, yrefs = 0.0f;
   float sinv = 0.0f, cosv = 1.0f;
   float scalea = 1.0f, scaleb = 1.0f, scaleab = 1.0f, scalebb = 1.0f;
+*/
+  xref = gpt->points[0];
+  yref = gpt->points[1];
+/* End EFH */
 
   if(gpt->source_count > 10)
   {
@@ -805,6 +1264,7 @@ static void dt_ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_mask
 
   float x, y;
 
+  // TODO: this can be replaced with a call to dt_ellipse_draw_shape()
   // draw shape
   if(gpt->points_count > 10)
   {
@@ -867,6 +1327,7 @@ static void dt_ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_mask
     }
   }
 
+  // TODO: this can be replaced with a call to dt_ellipse_draw_border()
   // draw border
   if((gui->group_selected == index) && gpt->border_count > 10)
   {
@@ -975,6 +1436,8 @@ static void dt_ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_mask
   }
 }
 
+/* Begin EFH */
+/*
 static int dt_ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
                                  float rotation, float **points, int *points_count)
 {
@@ -1044,6 +1507,8 @@ static int dt_ellipse_get_points(dt_develop_t *dev, float xx, float yy, float ra
   *points_count = 0;
   return 0;
 }
+*/
+/* End EFH */
 
 static int dt_ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                       dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)

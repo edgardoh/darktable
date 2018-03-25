@@ -65,6 +65,9 @@ typedef enum dt_collection_sort_t
   DT_COLLECTION_SORT_ID,
   DT_COLLECTION_SORT_COLOR,
   DT_COLLECTION_SORT_GROUP,
+  /* Begin EFH */
+  DT_COLLECTION_SORT_IOP_EH,
+  /* End EFH */
   DT_COLLECTION_SORT_PATH
 } dt_collection_sort_t;
 
@@ -88,6 +91,9 @@ typedef enum dt_collection_properties_t
   DT_COLLECTION_PROP_ISO,
   DT_COLLECTION_PROP_APERTURE,
   DT_COLLECTION_PROP_FILENAME,
+  /* Begin EFH */
+  DT_COLLECTION_PROP_IOP_EH,
+  /* End EFH */
   DT_COLLECTION_PROP_GEOTAGGING,
   DT_COLLECTION_PROP_LOCAL_COPY
 } dt_collection_properties_t;

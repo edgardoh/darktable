@@ -150,6 +150,10 @@ typedef struct dt_develop_t
   // operations pipeline
   int32_t iop_instance;
   GList *iop;
+/* Begin EFH */
+  // iop's to be deleted
+  GList *alliop;
+/* End EFH */
 
   // histogram for display.
   uint32_t *histogram, *histogram_pre_tonecurve, *histogram_pre_levels;
@@ -250,6 +254,10 @@ typedef struct dt_develop_t
     GtkWidget *floating_window, *softproof_button, *gamut_button;
   } profile;
 
+/* Begin EFH */
+  gboolean darkroom_skip_mouse_events; // skip mouse events for masks
+  int mask_form_selected_id; // select a mask inside an iop
+/* End EFH */
 } dt_develop_t;
 
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached);

@@ -37,7 +37,11 @@ typedef enum dt_masks_type_t
   DT_MASKS_CLONE = 1 << 3,
   DT_MASKS_GRADIENT = 1 << 4,
   DT_MASKS_ELLIPSE = 1 << 5,
-  DT_MASKS_BRUSH = 1 << 6
+/* Begin EFH */
+//  DT_MASKS_BRUSH = 1 << 6
+  DT_MASKS_BRUSH = 1 << 6,
+  DT_MASKS_NON_CLONE = 1 << 7
+/* End EFH */
 } dt_masks_type_t;
 
 /**masts states */
@@ -261,6 +265,10 @@ int dt_masks_legacy_params(dt_develop_t *dev, void *params, const int old_versio
 
 /** we create a completely new form. */
 dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
+/* Begin EFH */
+/** retrieve a form from a list of forms with is id */
+dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);
+/* End EFH */
 /** retrieve a form with is id */
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id);
 
@@ -315,6 +323,13 @@ int dt_masks_form_duplicate(dt_develop_t *dev, int formid);
 /** utils functions */
 int dt_masks_point_in_form_exact(float x, float y, float *points, int points_start, int points_count);
 int dt_masks_point_in_form_near(float x, float y, float *points, int points_start, int points_count, float distance, int *near);
+
+/* Begin EFH */
+void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel);
+
+/* duplicate the list of forms, replace item in the list with form is the same formid */
+GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form);
+/* End EFH */
 
 
 /** code for dynamic handling of intermediate buffers */

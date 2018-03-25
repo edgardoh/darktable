@@ -29,6 +29,9 @@
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
 #include "develop/tiling.h"
+/* Begin EFH */
+#include "develop/masks.h"
+/* End EFH */
 #include "gui/gtk.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
@@ -152,6 +155,12 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe, size_t size, int32_t 
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
+/* Begin EFH */
+  pipe->iop = NULL;
+  pipe->allnodes = NULL;
+  pipe->alliop = NULL;
+  pipe->forms = NULL;
+/* End EFH */
 
   return 1;
 }
@@ -176,12 +185,80 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
   pipe->icc_intent = icc_intent;
 }
 
+/* Begin EFH */
+static void _dev_pixelpipe_free_nodes(dt_dev_pixelpipe_t *pipe, GList *_nodes)
+{
+  // destroy all nodes
+  GList *nodes = _nodes;
+  while(nodes)
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    // printf("cleanup module `%s'\n", piece->module->name());
+    piece->module->cleanup_pipe(piece->module, pipe, piece);
+    free(piece->blendop_data);
+    piece->blendop_data = NULL;
+    free(piece->histogram);
+    piece->histogram = NULL;
+    free(piece);
+    nodes = g_list_next(nodes);
+  }
+  g_list_free(_nodes);
+}
+
+static void _dev_pixelpipe_free_allnodes(dt_dev_pixelpipe_t *pipe, GList *_allnodes)
+{
+  GList *allnodes = _allnodes;
+  while (allnodes)
+  {
+    GList *nodes = (GList*)allnodes->data;
+    
+    _dev_pixelpipe_free_nodes(pipe, nodes);
+    
+    allnodes = g_list_next(allnodes);
+  }
+  g_list_free(_allnodes);
+}
+
+static void _dev_pixelpipe_free_iop(GList *iop)
+{
+  if (iop) g_list_free(iop);
+}
+
+static void _dev_pixelpipe_free_alliop(GList *_alliop)
+{
+  GList *alliop = _alliop;
+  while (alliop)
+  {
+    GList *iop = (GList*)alliop->data;
+    if (iop) g_list_free(iop);
+    
+    alliop = g_list_next(alliop);
+  }
+  g_list_free(_alliop);
+}
+/* End EFH */
+
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
   dt_pthread_mutex_lock(&pipe->backbuf_mutex);
   pipe->backbuf = NULL;
   // blocks while busy and sets shutdown bit:
-  dt_dev_pixelpipe_cleanup_nodes(pipe);
+/* Begin EFH */
+//  dt_dev_pixelpipe_cleanup_nodes(pipe);
+  pipe->shutdown = 1;
+  dt_pthread_mutex_lock(&pipe->busy_mutex);
+  if (pipe->nodes)
+  {
+    _dev_pixelpipe_free_nodes(pipe, pipe->nodes);
+    pipe->nodes = NULL;
+  }
+  if (pipe->allnodes)
+  {
+    _dev_pixelpipe_free_allnodes(pipe, pipe->allnodes);
+    pipe->allnodes = NULL;
+  }
+  dt_pthread_mutex_unlock(&pipe->busy_mutex);
+/* End EFH */
   // so now it's safe to clean up cache:
   dt_dev_pixelpipe_cache_cleanup(&(pipe->cache));
   dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
@@ -190,8 +267,41 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
   pipe->icc_filename = NULL;
+/* Begin EFH */
+  if (pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
+  if (pipe->iop)
+  {
+    _dev_pixelpipe_free_iop(pipe->iop);
+    pipe->iop = NULL;
+  }
+  if (pipe->alliop)
+  {
+    _dev_pixelpipe_free_alliop(pipe->alliop);
+    pipe->alliop = NULL;
+  }
+/* End EFH */
 }
 
+/* Begin EFH */
+void _dev_pixelpipe_cleanup_nodes_internal(dt_dev_pixelpipe_t *pipe)
+{
+  // FIXME: either this or all process() -> gdk mutices have to be changed!
+  //        (this is a circular dependency on busy_mutex and the gdk mutex)
+  pipe->shutdown = 1;
+  dt_pthread_mutex_lock(&pipe->busy_mutex);
+  if (pipe->nodes)
+  {
+    pipe->allnodes = g_list_append(pipe->allnodes, pipe->nodes);
+    pipe->nodes = NULL;
+  }
+  dt_pthread_mutex_unlock(&pipe->busy_mutex);
+}
+
+/*
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
 {
   // FIXME: either this or all process() -> gdk mutices have to be changed!
@@ -216,14 +326,44 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   pipe->nodes = NULL;
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
+*/
+
+void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
+{
+  // FIXME: either this or all process() -> gdk mutices have to be changed!
+  //        (this is a circular dependency on busy_mutex and the gdk mutex)
+  pipe->shutdown = 1;
+  dt_pthread_mutex_lock(&pipe->busy_mutex);
+  
+  if (pipe->nodes)
+  {
+    _dev_pixelpipe_free_nodes(pipe, pipe->nodes);
+    pipe->nodes = NULL;
+  }
+  if (pipe->allnodes)
+  {
+    _dev_pixelpipe_free_allnodes(pipe, pipe->allnodes);
+    pipe->allnodes = NULL;
+  }
+
+  dt_pthread_mutex_unlock(&pipe->busy_mutex);
+}
+
+/* End EFH */
 
 void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   pipe->shutdown = 0;
-  g_assert(pipe->nodes == NULL);
+/* Begin EFH */
+//  g_assert(pipe->nodes == NULL);
+/* End EFH */
   // for all modules in dev:
   GList *modules = dev->iop;
+/* Begin EFH */
+  GList *modules_new = NULL;
+  GList *nodes = NULL;
+/* End EFH */
   while(modules)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -248,10 +388,31 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       piece->process_cl_ready = 0;
       piece->process_tiling_ready = 0;
       dt_iop_init_pipe(piece->module, pipe, piece);
-      pipe->nodes = g_list_append(pipe->nodes, piece);
+/* Begin EFH */
+//      pipe->nodes = g_list_append(pipe->nodes, piece);
+      nodes = g_list_append(nodes, piece);
+/* End EFH */
     }
+/* Begin EFH */
+    modules_new = g_list_append(modules_new, module);
+/* End EFH */
     modules = g_list_next(modules);
   }
+/* Begin EFH */
+  if (pipe->nodes)
+  {
+    pipe->allnodes = g_list_append(pipe->allnodes, pipe->nodes);
+    pipe->nodes = NULL;
+  }
+  if (pipe->iop)
+  {
+    pipe->alliop = g_list_append(pipe->alliop, pipe->iop);
+    pipe->iop = NULL;
+  }
+  
+  pipe->nodes = nodes;
+  pipe->iop = modules_new;
+/* End EFH */
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
 
@@ -323,7 +484,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   if(pipe->changed & DT_DEV_PIPE_REMOVE)
   {
     // modules have been added in between or removed. need to rebuild the whole pipeline.
-    dt_dev_pixelpipe_cleanup_nodes(pipe);
+/* Begin EFH */
+//    dt_dev_pixelpipe_cleanup_nodes(pipe);
+    _dev_pixelpipe_cleanup_nodes_internal(pipe);
+/* End EFH */
     dt_dev_pixelpipe_create_nodes(pipe, dev);
     dt_dev_pixelpipe_synch_all(pipe, dev);
   }
@@ -1580,6 +1744,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       dt_develop_blend_process(module, piece, input, *output, &roi_in, roi_out);
       pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_CPU);
       pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
+/* Begin EFH */
+      if(pipe->shutdown)
+      {
+        dt_pthread_mutex_unlock(&pipe->busy_mutex);
+        return 1;
+      }
+/* End EFH */
     }
 #else // HAVE_OPENCL
     // histogram collection for module
@@ -1664,6 +1835,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_develop_blend_process(module, piece, input, *output, &roi_in, roi_out);
     pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_CPU);
     pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
+/* Begin EFH */
+    if(pipe->shutdown)
+    {
+      dt_pthread_mutex_unlock(&pipe->busy_mutex);
+      return 1;
+    }
+/* End EFH */
 #endif // HAVE_OPENCL
 
     char histogram_log[32] = "";
@@ -2246,6 +2424,15 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
                              float scale)
 {
   pipe->processing = 1;
+/* Begin EFH */
+  GList *modules = g_list_last(pipe->iop);
+  GList *pieces = g_list_last(pipe->nodes);
+  if (modules == NULL || pieces == NULL)
+  {
+    pipe->processing = 0;
+    return 1;
+  }
+/* End EFH */
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
   pipe->devid = (pipe->opencl_enabled) ? dt_opencl_lock_device(pipe->type)
                                        : -1; // try to get/lock opencl resource
@@ -2264,11 +2451,19 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, width, height, scale };
   // printf("pixelpipe homebrew process start\n");
   if(darktable.unmuted & DT_DEBUG_DEV) dt_dev_pixelpipe_cache_print(&pipe->cache);
+/* Begin EFH */
+  // get a snapshot of mask list
+  if (pipe->forms) g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+  pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+/* End EFH */
 
   //  go through list of modules from the end:
-  guint pos = g_list_length(dev->iop);
-  GList *modules = g_list_last(dev->iop);
-  GList *pieces = g_list_last(pipe->nodes);
+/* Begin EFH */
+//  guint pos = g_list_length(dev->iop);
+  guint pos = g_list_length(pipe->iop);
+//  GList *modules = g_list_last(dev->iop);
+//  GList *pieces = g_list_last(pipe->nodes);
+/* End EFH */
 
 // re-entry point: in case of late opencl errors we start all over again with opencl-support disabled
 restart:
@@ -2329,6 +2524,23 @@ restart:
   }
 
   // release resources:
+/* Begin EFH */
+  if (pipe->allnodes)
+  {
+    _dev_pixelpipe_free_allnodes(pipe, pipe->allnodes);
+    pipe->allnodes = NULL;
+  }
+  if (pipe->alliop)
+  {
+    _dev_pixelpipe_free_alliop(pipe->alliop);
+    pipe->alliop = NULL;
+  }
+  if (pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
+/* End EFH */
   if(pipe->devid >= 0)
   {
     dt_opencl_unlock_device(pipe->devid);
@@ -2363,9 +2575,21 @@ void dt_dev_pixelpipe_get_dimensions(dt_dev_pixelpipe_t *pipe, struct dt_develop
                                      int height_in, int *width, int *height)
 {
   dt_pthread_mutex_lock(&pipe->busy_mutex);
+/* Begin EFH */
+  if (pipe->shutdown || pipe->nodes == NULL)
+  {
+    *width = width_in;
+    *height = height_in;
+    dt_pthread_mutex_unlock(&pipe->busy_mutex);
+    return;
+  }
+/* End EFH */
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out;
-  GList *modules = dev->iop;
+/* Begin EFH */
+//  GList *modules = dev->iop;
+  GList *modules = pipe->iop;
+/* End EFH */
   GList *pieces = pipe->nodes;
   while(modules)
   {
