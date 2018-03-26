@@ -37,7 +37,10 @@
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
-#define CURRENT_DATABASE_VERSION_LIBRARY 15
+/* Begin EFH masks_history */
+// #define CURRENT_DATABASE_VERSION_LIBRARY 15
+#define CURRENT_DATABASE_VERSION_LIBRARY 16
+/* End EFH masks_history */
 #define CURRENT_DATABASE_VERSION_DATA 1
 
 typedef struct dt_database_t
@@ -967,6 +970,49 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
 
     sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
     new_version = 15;
+/* Begin EFH masks_history */
+  }
+  else if(version == 15)
+  {
+    // 15 -> 16
+    sqlite3_exec(db->handle, "BEGIN TRANSACTION", NULL, NULL, NULL);
+
+    TRY_EXEC("ALTER TABLE main.history ADD COLUMN hist_type INTEGER",
+             "[init] can't add `hist_type' column to database\n");
+
+    TRY_EXEC("UPDATE main.history SET hist_type = 0", "[init] can't initialize `hist_type' with 0\n");
+
+    TRY_EXEC("CREATE TABLE main.masks_history (imgid INTEGER, num INTEGER, formid INTEGER, form INTEGER, name VARCHAR(256), "
+             "version INTEGER, points BLOB, points_count INTEGER, source BLOB)",
+             "[init] can't create `masks_history` table\n");
+    
+    TRY_EXEC("CREATE INDEX main.masks_history_imgid_index ON history (imgid, num)",
+             "[init] can't create index `masks_history_imgid_index' in database\n");
+
+    // create a mask manager entry on history for all images containing all forms
+    // make room for mask manager history entry
+    TRY_EXEC("UPDATE main.history SET num=num+1 WHERE imgid IN (SELECT imgid FROM main.mask WHERE main.mask.imgid=main.history.imgid)", 
+             "[init] can't update `num' with num+1\n");
+
+    // update history end
+    TRY_EXEC("UPDATE main.images SET history_end = history_end+1 WHERE id IN (SELECT imgid FROM main.mask WHERE main.mask.imgid=main.images.id)", 
+             "[init] can't update `history_end' with history_end+1\n");
+
+    // copy all masks into history
+    TRY_EXEC("INSERT INTO main.masks_history (imgid, num, formid, form, name, version, points, points_count, source) SELECT "
+             "imgid, 0, formid, form, name, version, points, points_count, source FROM main.mask", 
+             "[init] can't insert into masks_history\n");
+
+    // create a mask manager entry for each image that has maks
+    TRY_EXEC("INSERT INTO main.history (imgid, num, operation, op_params, module, enabled, "
+             "blendop_params, blendop_version, multi_priority, multi_name, hist_type) "
+             "SELECT DISTINCT imgid, 0, 'mask manager', NULL, 0, 1, NULL, 0, 0, 'mask manager', 1 FROM main.mask "
+             "GROUP BY imgid", 
+             "[init] can't insert mask manager into history\n");
+
+    sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
+    new_version = 16;
+/* End EFH masks_history */
   } // maybe in the future, see commented out code elsewhere
     //   else if(version == XXX)
     //   {
@@ -1096,9 +1142,20 @@ static void _create_library_schema(dt_database_t *db)
       db->handle,
       "CREATE TABLE main.history (imgid INTEGER, num INTEGER, module INTEGER, "
       "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+/* Begin EFH masks_history */
+//      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256), hist_type INTEGER)",
+/* End EFH masks_history */
       NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE INDEX main.history_imgid_index ON history (imgid)", NULL, NULL, NULL);
+/* Begin EFH masks_history */
+  ////////////////////////////// mask history
+  sqlite3_exec(db->handle,
+               "CREATE TABLE main.masks_history (imgid INTEGER, num INTEGER, formid INTEGER, form INTEGER, name VARCHAR(256), "
+               "version INTEGER, points BLOB, points_count INTEGER, source BLOB)",
+               NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE INDEX main.masks_history_imgid_index ON history (imgid, num)", NULL, NULL, NULL);
+/* End EFH masks_history */
   ////////////////////////////// mask
   sqlite3_exec(db->handle,
                "CREATE TABLE main.mask (imgid INTEGER, formid INTEGER, form INTEGER, name VARCHAR(256), "
@@ -1180,7 +1237,10 @@ static void _create_memory_schema(dt_database_t *db)
       db->handle,
       "CREATE TABLE memory.history (imgid INTEGER, num INTEGER, module INTEGER, "
       "operation VARCHAR(256) UNIQUE ON CONFLICT REPLACE, op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+/* Begin EFH masks_history */
+//      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
+      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256), hist_type INTEGER)",
+/* End EFH masks_history */
       NULL, NULL, NULL);
   sqlite3_exec(
       db->handle,

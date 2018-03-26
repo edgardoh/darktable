@@ -532,6 +532,108 @@ void dt_dev_configure(dt_develop_t *dev, int wd, int ht)
   }
 }
 
+/* Begin EFH masks_history */
+// TODO: we should have only one function in masks.c to do this
+static void _write_masks_history_item(const int imgid, const int num, dt_masks_form_t *form)
+{
+  sqlite3_stmt *stmt;
+
+  // write the form into the database
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "INSERT INTO main.masks_history (imgid, num, formid, form, name, "
+                                                             "version, points, points_count,source) VALUES "
+                                                             "(?1, ?9, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, num);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, form->formid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, form->type);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, form->name, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 8, form->source, 2 * sizeof(float), SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, form->version);
+  if(form->type & DT_MASKS_CIRCLE)
+  {
+    GList *points = g_list_first(form->points);
+    if(points)
+    {
+      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(points->data);
+      DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, circle, sizeof(dt_masks_point_circle_t), SQLITE_TRANSIENT);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, 1);
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+    }
+  }
+  else if(form->type & DT_MASKS_PATH)
+  {
+    guint nb = g_list_length(form->points);
+    dt_masks_point_path_t *ptbuf = (dt_masks_point_path_t *)calloc(nb, sizeof(dt_masks_point_path_t));
+    GList *points = g_list_first(form->points);
+    int pos = 0;
+    while(points)
+    {
+      dt_masks_point_path_t *pt = (dt_masks_point_path_t *)points->data;
+      ptbuf[pos++] = *pt;
+      points = g_list_next(points);
+    }
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, ptbuf, nb * sizeof(dt_masks_point_path_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, nb);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    free(ptbuf);
+  }
+  else if(form->type & DT_MASKS_GROUP)
+  {
+    guint nb = g_list_length(form->points);
+    dt_masks_point_group_t *ptbuf = (dt_masks_point_group_t *)calloc(nb, sizeof(dt_masks_point_group_t));
+    GList *points = g_list_first(form->points);
+    int pos = 0;
+    while(points)
+    {
+      dt_masks_point_group_t *pt = (dt_masks_point_group_t *)points->data;
+      ptbuf[pos++] = *pt;
+      points = g_list_next(points);
+    }
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, ptbuf, nb * sizeof(dt_masks_point_group_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, nb);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    free(ptbuf);
+  }
+  else if(form->type & DT_MASKS_GRADIENT)
+  {
+    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(g_list_first(form->points)->data);
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, gradient, sizeof(dt_masks_point_gradient_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, 1);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+  }
+  else if(form->type & DT_MASKS_ELLIPSE)
+  {
+    dt_masks_point_ellipse_t *ellipse = (dt_masks_point_ellipse_t *)(g_list_first(form->points)->data);
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, ellipse, sizeof(dt_masks_point_ellipse_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, 1);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+  }
+  else if(form->type & DT_MASKS_BRUSH)
+  {
+    guint nb = g_list_length(form->points);
+    dt_masks_point_brush_t *ptbuf = (dt_masks_point_brush_t *)calloc(nb, sizeof(dt_masks_point_brush_t));
+    GList *points = g_list_first(form->points);
+    int pos = 0;
+    while(points)
+    {
+      dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)points->data;
+      ptbuf[pos++] = *pt;
+      points = g_list_next(points);
+    }
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, ptbuf, nb * sizeof(dt_masks_point_brush_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, nb);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    free(ptbuf);
+  }
+}
+/* End EFH masks_history */
 // helper used to synch a single history item with db
 int dt_dev_write_history_item(const dt_image_t *image, dt_dev_history_item_t *h, int32_t num)
 {
@@ -553,6 +655,8 @@ int dt_dev_write_history_item(const dt_image_t *image, dt_dev_history_item_t *h,
   // printf("[dev write history item] writing %d - %s params %f %f\n", h->module->instance, h->module->op,
   // *(float *)h->params, *(((float *)h->params)+1));
   sqlite3_finalize(stmt);
+/* Begin EFH masks_history */
+/*
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "UPDATE main.history SET operation = ?1, op_params = ?2, module = ?3, enabled = ?4, "
                               "blendop_params = ?7, blendop_version = ?8, multi_priority = ?9, multi_name = "
@@ -568,12 +672,212 @@ int dt_dev_write_history_item(const dt_image_t *image, dt_dev_history_item_t *h,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, dt_develop_blend_version());
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, h->multi_priority);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, h->multi_name, -1, SQLITE_TRANSIENT);
+*/
+  if (h->hist_type == DT_DEV_HISTORY_TYPE_IOP)
+  {
+    // this is an iop entry
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "UPDATE main.history SET operation = ?1, op_params = ?2, module = ?3, enabled = ?4, "
+                                "blendop_params = ?7, blendop_version = ?8, multi_priority = ?9, multi_name = "
+                                "?10, hist_type = ?11 WHERE imgid = ?5 AND num = ?6",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, h->module->op, -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, h->params, h->module->params_size, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, h->module->version());
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, h->enabled);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, image->id);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 6, num);
+    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 7, h->blend_params, sizeof(dt_develop_blend_params_t), SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, dt_develop_blend_version());
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, h->multi_priority);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, h->multi_name, -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, h->hist_type);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+  }
+  else
+  {
+    // this is a mask manager entry
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "UPDATE main.history SET operation = ?1, op_params = NULL, module = 0, enabled = 1, "
+                                "blendop_params = NULL, blendop_version = 0, multi_priority = 0, multi_name = "
+                                "?2, hist_type = ?3 WHERE imgid = ?4 AND num = ?5",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, dt_dev_history_mm_item_name(), -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, dt_dev_history_mm_item_name(), -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, h->hist_type);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, image->id);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, num);
+    
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+  }
+  
+  // delete history mask
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1 AND num = ?2", -1, &stmt,
+                              NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, image->id);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
+/* End EFH masks_history */
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+/* Begin EFH masks_history */
+  // write masks (if any)
+  if (h->forms)
+  {
+    GList *forms = g_list_first(h->forms);
+
+    while(forms)
+    {
+      dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+
+      if (form)
+        _write_masks_history_item(image->id, num, form);
+
+      forms = g_list_next(forms);
+    }
+  }
+/* End EFH masks_history */
   return 0;
 }
 
+/* Begin EFH masks_history */
+// add/update a history entry for an IOP
+static void _add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, int *hist_changed)
+{
+  *hist_changed = 0;
+  
+  if (module == NULL) return;
+  
+  if(dev->gui_attached)
+  {
+    *hist_changed = 1;
+    
+    GList *history = g_list_nth(dev->history, dev->history_end);
+    while(history)
+    {
+      GList *next = g_list_next(history);
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+
+      dt_dev_free_history_item(hist);
+      dev->history = g_list_delete_link(dev->history, history);
+      
+      history = next;
+    }
+    
+    history = g_list_nth(dev->history, dev->history_end - 1);
+    dt_dev_history_item_t *hist = history ? (dt_dev_history_item_t *)(history->data) : 0;
+    
+    // check if last entry is a mask manager
+    if (hist != NULL)
+    {
+      if (hist->hist_type == DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+      {
+        history = NULL;
+        hist = NULL;
+      }
+    }
+    
+    if(!history // if no history yet, push new item for sure.
+       || module != hist->module
+       || module->instance != hist->module->instance             // add new item for different op
+       || module->multi_priority != hist->module->multi_priority // or instance
+       || ((dev->focus_hash != hist->focus_hash)                 // or if focused out and in
+       && (// but only add item if there is a difference at all for the same module
+         (module->params_size != hist->module->params_size) ||
+         (module->params_size == hist->module->params_size && memcmp(hist->params, module->params, module->params_size)) || 
+         (memcmp(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t)) != 0)
+         )))
+    {
+      // new operation, push new item
+      // printf("adding new history item %d - %s\n", dev->history_end, module->op);
+      // if(history) printf("because item %d - %s is different operation.\n", dev->history_end-1,
+      // ((dt_dev_history_item_t *)history->data)->module->op);
+      dev->history_end++;
+
+      hist = (dt_dev_history_item_t *)malloc(sizeof(dt_dev_history_item_t));
+      if(enable)
+      {
+        module->enabled = TRUE;
+        if(module->off)
+        {
+          darktable.gui->reset = 1;
+          gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), module->enabled);
+          darktable.gui->reset = 0;
+        }
+      }
+      
+      hist->hist_type = DT_DEV_HISTORY_TYPE_IOP;
+      hist->focus_hash = dev->focus_hash;
+      hist->enabled = module->enabled;
+      hist->module = module;
+      hist->params = malloc(module->params_size);
+      hist->multi_priority = module->multi_priority;
+      snprintf(hist->multi_name, sizeof(hist->multi_name), "%s", module->multi_name);
+      
+      /* allocate and set hist blend_params */
+      hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
+      memcpy(hist->params, module->params, module->params_size);
+      memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
+
+      /* by default do not record masks */
+      hist->forms = NULL;
+
+      dev->history = g_list_append(dev->history, hist);
+      dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
+      dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH; // topology remains, as modules are fixed for now.
+    }
+    else
+    {
+      // same operation, change params
+      // printf("changing same history item %d - %s\n", dev->history_end-1, module->op);
+      hist = (dt_dev_history_item_t *)history->data;
+      memcpy(hist->params, module->params, module->params_size);
+
+      if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+        memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
+
+      // if the user changed stuff and the module is still not enabled, do it:
+      if(!hist->enabled && !module->enabled)
+      {
+        module->enabled = 1;
+        if(module->off)
+        {
+          darktable.gui->reset = 1;
+          gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), module->enabled);
+          darktable.gui->reset = 0;
+        }
+      }
+      
+      hist->multi_priority = module->multi_priority;
+      memcpy(hist->multi_name, module->multi_name, sizeof(module->multi_name));
+      hist->enabled = module->enabled;
+      dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+      dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+    }
+  }
+#if 0
+  {
+    // debug:
+    printf("remaining %d history items:\n", dev->history_end);
+    GList *history = dev->history;
+    int i = 0;
+    while(history)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+      printf("%d %s\n", i, hist->module->op);
+      history = g_list_next(history);
+      i++;
+    }
+  }
+#endif
+}
+/* End EFH masks_history */
+
+/* Begin EFH masks_history */
+#if 0
 void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
 {
   if(!darktable.gui || darktable.gui->reset) return;
@@ -690,12 +994,164 @@ void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolea
     dt_control_queue_redraw_center();
   }
 }
+#endif
+void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+{
+  if(!darktable.gui || darktable.gui->reset) return;
+
+  int hist_changed = 0;
+  
+  dt_pthread_mutex_lock(&dev->history_mutex);
+  
+  _add_history_item(dev, module, enable, &hist_changed);
+  
+  // invalidate buffers and force redraw of darkroom
+  dt_dev_invalidate_all(dev);
+  
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+  
+  if(dev->gui_attached)
+  {
+    /* signal that history has changed */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
+
+    /* redraw */
+    dt_control_queue_redraw_center();
+  }
+}
+
+// add/update a history entry and records the mask changes
+void dt_dev_add_maks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+{
+  if(!darktable.gui || darktable.gui->reset) return;
+
+  int hist_changed = 0;
+  
+  dt_pthread_mutex_lock(&dev->history_mutex);
+
+  // if called from an iop
+  if (module != NULL)
+  {
+    _add_history_item(dev, module, enable, &hist_changed);
+    
+    // if history has changed process masks on the last entry
+    if (hist_changed && dev->history_end > 0)
+    {
+      GList *history = g_list_nth(dev->history, dev->history_end-1);
+      if (history)
+      {
+        dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+        
+        if (hist->forms)
+        {
+          g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+          hist->forms = NULL;
+        }
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
+      }
+    }
+  }
+  else
+  {
+    // this is a call from the mask manager, so process masks on the "mask manager" entry
+    if(dev->gui_attached)
+    {
+      // remove obsoleted history items
+      GList *history = g_list_nth(dev->history, dev->history_end);
+      while(history)
+      {
+        GList *next = g_list_next(history);
+        dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+
+        dt_dev_free_history_item(hist);
+        dev->history = g_list_delete_link(dev->history, history);
+        
+        history = next;
+      }
+      history = g_list_nth(dev->history, dev->history_end - 1);
+      dt_dev_history_item_t *hist = history ? (dt_dev_history_item_t *)(history->data) : 0;
+      if (hist != NULL)
+      {
+        // check if last entry is a mask manager entry
+        if (hist->hist_type != DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+        {
+          history = NULL;
+          hist = NULL;
+        }
+      }
+      // if no history yet or last entry is not a mask manager, add a new one
+      if (history == NULL || hist == NULL)
+      {
+        dev->history_end++;
+
+        hist = (dt_dev_history_item_t *)malloc(sizeof(dt_dev_history_item_t));
+        hist->hist_type = DT_DEV_HISTORY_TYPE_MASK_MANAGER;
+        hist->focus_hash = dev->focus_hash;
+        hist->enabled = 1;
+        hist->module = NULL;
+        hist->params = NULL;
+        hist->multi_priority = 0;
+        snprintf(hist->multi_name, sizeof(hist->multi_name), "%s", dt_dev_history_mm_item_name_translated());
+        hist->blend_params = NULL;
+
+        hist->forms = NULL;
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
+
+        dev->history = g_list_append(dev->history, hist);
+        dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
+        dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH; // topology remains, as modules are fixed for now.
+      }
+      else
+      {
+        // last entry is a mask manager, add it here
+        if (hist->forms)
+        {
+          g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+          hist->forms = NULL;
+        }
+        if (dev->forms)
+        {
+          hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+        }
+        
+        dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+        dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+      }
+    }
+  }
+  
+  // invalidate buffers and force redraw of darkroom
+  dt_dev_invalidate_all(dev);
+  
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+  
+  if(dev->gui_attached)
+  {
+    /* signal that history has changed */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
+
+    /* redraw */
+    dt_control_queue_redraw_center();
+  }
+}
+/* End EFH masks_history */
 
 void dt_dev_free_history_item(gpointer data)
 {
   dt_dev_history_item_t *item = (dt_dev_history_item_t *)data;
   free(item->params);
   free(item->blend_params);
+/* Begin EFH masks_history */
+  if (item->forms) g_list_free_full(item->forms, (void (*)(void *))dt_masks_free_form);
+/* End EFH masks_history */
   free(item);
 }
 
@@ -790,6 +1246,10 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
 {
+/* Begin EFH masks_history */
+  int32_t history_end = dev->history_end;
+  int forms_changed = 0;
+/* End EFH masks_history */
   // printf("dev popping all history items >= %d\n", cnt);
   dt_pthread_mutex_lock(&dev->history_mutex);
   darktable.gui->reset = 1;
@@ -804,19 +1264,82 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
     module->enabled = module->default_enabled;
     modules = g_list_next(modules);
   }
+/* Begin EFH masks_history */
+  GList *hist_forms = NULL;
+/* End EFH masks_history */
   // go through history and set gui params
   GList *history = dev->history;
   for(int i = 0; i < cnt && history; i++)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+/* Begin EFH masks_history */
+    if (hist->hist_type == DT_DEV_HISTORY_TYPE_IOP)
+    {
+/* End EFH masks_history */
     memcpy(hist->module->params, hist->params, hist->module->params_size);
     memcpy(hist->module->blend_params, hist->blend_params, sizeof(dt_develop_blend_params_t));
 
     hist->module->enabled = hist->enabled;
     snprintf(hist->module->multi_name, sizeof(hist->module->multi_name), "%s", hist->multi_name);
+/* Begin EFH masks_history */
+    }
+    
+    // save the last forms snapshot
+    if (hist->forms) hist_forms = hist->forms;
+/* End EFH masks_history */
 
     history = g_list_next(history);
   }
+/* Begin EFH masks_history */
+  if (history_end > cnt)
+  {
+    for(int i = 0; i < history_end-cnt && history; i++)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+  
+      if (hist->forms != NULL) forms_changed = 1;
+      
+      history = g_list_next(history);
+    }
+  }
+  else
+  {
+    if (hist_forms != NULL) forms_changed = 1;
+  }
+  
+  if (forms_changed)
+  {
+    // make sure an already added form on dev->allforms will not be added to dev->forms
+    if(dev->form_gui)
+    {
+      dev->form_gui->creation = FALSE;
+      dev->form_gui->creation_module = NULL;
+    }
+    
+    if (dev->forms)
+    {
+      g_list_free(dev->forms);
+      dev->forms = NULL;
+    }
+    if (dev->allforms)
+    {
+      g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+      dev->allforms = NULL;
+    }
+    if (hist_forms)
+    {
+      dev->forms = dt_masks_dup_forms_deep(hist_forms, NULL);
+      
+      GList *forms = g_list_first(dev->forms);
+      while(forms)
+      {
+        dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+        dev->allforms = g_list_append(dev->allforms, form);
+        forms = g_list_next(forms);
+      }
+    }
+  }
+/* End EFH masks_history */
   // update all gui modules
   modules = dev->iop;
   while(modules)
@@ -830,6 +1353,18 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   darktable.gui->reset = 0;
   dt_dev_invalidate_all(dev);
   dt_pthread_mutex_unlock(&dev->history_mutex);
+/* Begin EFH masks_history */
+  if (darktable.develop->gui_module && dev->form_gui)
+  {
+    /*reset mask view */
+    dt_masks_reset_form_gui();
+  }
+  if(dev->gui_attached)
+  {
+    /* signal that history has changed */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
+  }
+/* End EFH masks_history */
   dt_control_queue_redraw_center();
 }
 
@@ -843,6 +1378,13 @@ void dt_dev_write_history(dt_develop_t *dev)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.id);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.id);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+/* End EFH masks_history */
   GList *history = dev->history;
   for(int i = 0; history; i++)
   {
@@ -867,6 +1409,20 @@ void dt_dev_write_history(dt_develop_t *dev)
     dt_tag_attach(tagid, dev->image_storage.id);
   else
     dt_tag_detach(tagid, dev->image_storage.id);
+/* Begin EFH masks_history */
+#if 1
+  // test if there's unlinked masks
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid, num FROM main.masks_history WHERE imgid = ?1 AND num "
+                                                             "NOT IN (SELECT num FROM main.history WHERE "
+                                                             "imgid = ?1)", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.id);
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    printf("unlinked masks history imgid=%i, num=%i\n", sqlite3_column_int(stmt, 0), sqlite3_column_int(stmt, 1));
+  }
+  sqlite3_finalize(stmt);
+#endif
+/* End EFH masks_history */
 }
 
 static void auto_apply_presets(dt_develop_t *dev)
@@ -897,7 +1453,10 @@ static void auto_apply_presets(dt_develop_t *dev)
   const int legacy = (image->flags & DT_IMAGE_NO_LEGACY_PRESETS) ? 0 : 1;
   char query[1024];
   snprintf(query, sizeof(query), "INSERT INTO memory.history SELECT ?1, 0, op_version, operation, op_params, "
-                                 "enabled, blendop_params, blendop_version, multi_priority, multi_name "
+/* Begin EFH masks_history */
+//                                 "enabled, blendop_params, blendop_version, multi_priority, multi_name "
+                                 "enabled, blendop_params, blendop_version, multi_priority, multi_name, %i "
+/* End EFH masks_history */
                                  "FROM %s WHERE autoapply=1 AND "
                                  "((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker)) AND "
                                  "?6 LIKE lens AND ?7 BETWEEN iso_min AND iso_max AND "
@@ -906,7 +1465,10 @@ static void auto_apply_presets(dt_develop_t *dev)
                                  "?10 BETWEEN focal_length_min AND focal_length_max AND "
                                  "(format = 0 OR format&?11!=0) ORDER BY writeprotect DESC, "
                                  "LENGTH(model), LENGTH(maker), LENGTH(lens)",
-           preset_table[legacy]);
+/* Begin EFH masks_history */
+//           preset_table[legacy]);
+                                 DT_DEV_HISTORY_TYPE_IOP, preset_table[legacy]);
+/* End EFH masks_history */
   // query for all modules at once:
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
@@ -981,6 +1543,15 @@ static void auto_apply_presets(dt_develop_t *dev)
       // fprintf(stderr, "[auto_apply_presets] imageid %d found %d matching presets (legacy %d)\n", imgid,
       // cnt, legacy);
       // advance the current history by that amount:
+/* Begin EFH masks_history */
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "UPDATE main.masks_history SET num=num+?1 WHERE imgid=?2", -1, &stmt, NULL);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, cnt);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+
+      if(sqlite3_step(stmt) == SQLITE_DONE)
+      {
+/* End EFH masks_history */
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                   "UPDATE main.history SET num=num+?1 WHERE imgid=?2", -1, &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, cnt);
@@ -1001,13 +1572,19 @@ static void auto_apply_presets(dt_develop_t *dev)
           DT_DEBUG_SQLITE3_PREPARE_V2(
               dt_database_get(darktable.db),
               "INSERT INTO main.history SELECT imgid, num, module, operation, op_params, enabled, "
-              "blendop_params, blendop_version, multi_priority, multi_name FROM memory.history",
+/* Begin EFH masks_history */
+//              "blendop_params, blendop_version, multi_priority, multi_name FROM memory.history",
+                "blendop_params, blendop_version, multi_priority, multi_name, hist_type FROM memory.history",
+/* End EFH masks_history */
               -1, &stmt, NULL);
           sqlite3_step(stmt);
         }
       }
     }
   }
+/* Begin EFH masks_history */
+  }
+/* End EFH masks_history */
   sqlite3_finalize(stmt);
 
   //  first time we are loading the image, try to import lightroom .xmp if any
@@ -1019,6 +1596,119 @@ static void auto_apply_presets(dt_develop_t *dev)
   // make sure these end up in the image_cache + xmp (sync through here if we set the flag)
   dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
 }
+/* Begin EFH masks_history */
+// TODO: we should have a single function in masks.c to do this
+static GList *_read_history_masks(dt_develop_t *dev, const int imgid, const int num)
+{
+  GList *forms = NULL;
+  
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid, formid, form, name, "
+                                                             "version, points, points_count, source "
+                                                             "FROM main.masks_history WHERE imgid = ?1 AND num = ?2",
+                                                             -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
+  
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    // db record:
+    // 0-img, 1-formid, 2-form_type, 3-name, 4-version, 5-points, 6-points_count, 7-source
+
+    // we get the values
+
+    int formid = sqlite3_column_int(stmt, 1);
+    dt_masks_type_t type = sqlite3_column_int(stmt, 2);
+    
+    dt_masks_form_t *form = (dt_masks_form_t *)calloc(1, sizeof(dt_masks_form_t));
+    form->type = type;
+
+    form->formid = formid;
+    const char *name = (const char *)sqlite3_column_text(stmt, 3);
+    snprintf(form->name, sizeof(form->name), "%s", name);
+    form->version = sqlite3_column_int(stmt, 4);
+    form->points = NULL;
+    int nb_points = sqlite3_column_int(stmt, 6);
+    memcpy(form->source, sqlite3_column_blob(stmt, 7), 2 * sizeof(float));
+
+    // and now we "read" the blob
+    if(form->type & DT_MASKS_CIRCLE)
+    {
+      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)malloc(sizeof(dt_masks_point_circle_t));
+      memcpy(circle, sqlite3_column_blob(stmt, 5), sizeof(dt_masks_point_circle_t));
+      form->points = g_list_append(form->points, circle);
+    }
+    else if(form->type & DT_MASKS_PATH)
+    {
+      dt_masks_point_path_t *ptbuf = (dt_masks_point_path_t *)sqlite3_column_blob(stmt, 5);
+      for(int i = 0; i < nb_points; i++)
+      {
+        dt_masks_point_path_t *point = (dt_masks_point_path_t *)malloc(sizeof(dt_masks_point_path_t));
+        memcpy(point, ptbuf + i, sizeof(dt_masks_point_path_t));
+        form->points = g_list_append(form->points, point);
+      }
+    }
+    else if(form->type & DT_MASKS_GROUP)
+    {
+      dt_masks_point_group_t *ptbuf = (dt_masks_point_group_t *)sqlite3_column_blob(stmt, 5);
+      for(int i = 0; i < nb_points; i++)
+      {
+        dt_masks_point_group_t *point = (dt_masks_point_group_t *)malloc(sizeof(dt_masks_point_group_t));
+        memcpy(point, ptbuf + i, sizeof(dt_masks_point_group_t));
+        form->points = g_list_append(form->points, point);
+      }
+    }
+    else if(form->type & DT_MASKS_GRADIENT)
+    {
+      dt_masks_point_gradient_t *gradient
+          = (dt_masks_point_gradient_t *)malloc(sizeof(dt_masks_point_gradient_t));
+      memcpy(gradient, sqlite3_column_blob(stmt, 5), sizeof(dt_masks_point_gradient_t));
+      form->points = g_list_append(form->points, gradient);
+    }
+    else if(form->type & DT_MASKS_ELLIPSE)
+    {
+      dt_masks_point_ellipse_t *ellipse
+          = (dt_masks_point_ellipse_t *)malloc(sizeof(dt_masks_point_ellipse_t));
+      memcpy(ellipse, sqlite3_column_blob(stmt, 5), sizeof(dt_masks_point_ellipse_t));
+      form->points = g_list_append(form->points, ellipse);
+    }
+    else if(form->type & DT_MASKS_BRUSH)
+    {
+      dt_masks_point_brush_t *ptbuf = (dt_masks_point_brush_t *)sqlite3_column_blob(stmt, 5);
+      for(int i = 0; i < nb_points; i++)
+      {
+        dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)malloc(sizeof(dt_masks_point_brush_t));
+        memcpy(point, ptbuf + i, sizeof(dt_masks_point_brush_t));
+        form->points = g_list_append(form->points, point);
+      }
+    }
+
+    if(form->version != dt_masks_version())
+    {
+      if(dt_masks_legacy_params(dev, form, form->version, dt_masks_version()))
+      {
+        const char *fname = dev->image_storage.filename + strlen(dev->image_storage.filename);
+        while(fname > dev->image_storage.filename && *fname != '/') fname--;
+        if(fname > dev->image_storage.filename) fname++;
+
+        fprintf(stderr,
+                "[_read_history_masks] %s (imgid `%i'): mask version mismatch: history is %d, dt %d.\n",
+                fname, dev->image_storage.id, form->version, dt_masks_version());
+        dt_control_log(_("%s: mask version mismatch: %d != %d"), fname, dt_masks_version(), form->version);
+
+        continue;
+      }
+    }
+
+    // and we can add the form to the list
+    forms = g_list_append(forms, form);    
+  }
+  
+  sqlite3_finalize(stmt);
+  
+  return forms;
+}
+/* End EFH masks_history */
 
 void dt_dev_read_history(dt_develop_t *dev)
 {
@@ -1031,7 +1721,10 @@ void dt_dev_read_history(dt_develop_t *dev)
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid, num, module, operation, "
                                                              "op_params, enabled, blendop_params, "
-                                                             "blendop_version, multi_priority, multi_name "
+/* Begin EFH masks_history */
+//                                                             "blendop_version, multi_priority, multi_name "
+                                                             "blendop_version, multi_priority, multi_name, hist_type "
+/* End EFH masks_history */
                                                              "FROM main.history WHERE imgid = ?1 ORDER BY num",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.id);
@@ -1041,11 +1734,20 @@ void dt_dev_read_history(dt_develop_t *dev)
     // db record:
     // 0-img, 1-num, 2-module_instance, 3-operation char, 4-params blob, 5-enabled, 6-blend_params,
     // 7-blendop_version, 8 multi_priority, 9 multi_name
+/* Begin EFH masks_history */
+    // , 10 hist_type
+/* End EFH masks_history */
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)malloc(sizeof(dt_dev_history_item_t));
+/* Begin EFH masks_history */
+    hist->forms = NULL;
+/* End EFH masks_history */
     hist->enabled = sqlite3_column_int(stmt, 5);
 
     const char *opname = (const char *)sqlite3_column_text(stmt, 3);
     int multi_priority = sqlite3_column_int(stmt, 8);
+/* Begin EFH masks_history */
+    hist->hist_type = sqlite3_column_int(stmt, 10);
+/* End EFH masks_history */
     const char *multi_name = (const char *)sqlite3_column_text(stmt, 9);
     if(!opname)
     {
@@ -1055,6 +1757,26 @@ void dt_dev_read_history(dt_develop_t *dev)
       continue;
     }
 
+/* Begin EFH masks_history */
+    const int imgid = sqlite3_column_int(stmt, 0);
+    const int num = sqlite3_column_int(stmt, 1);
+    
+    if(hist->hist_type == DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+    {
+      hist->enabled = 1;
+      hist->module = NULL;
+      hist->params = NULL;
+      hist->multi_priority = 0;
+      snprintf(hist->multi_name, sizeof(hist->multi_name), "%s", dt_dev_history_mm_item_name_translated());
+      hist->blend_params = NULL;
+      
+      hist->forms = _read_history_masks(dev, imgid, num);
+
+      dev->history = g_list_append(dev->history, hist);
+      dev->history_end++;
+      continue;
+    }
+/* End EFH masks_history */
     hist->module = NULL;
     dt_iop_module_t *find_op = NULL;
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
@@ -1182,6 +1904,10 @@ void dt_dev_read_history(dt_develop_t *dev)
     {
       memcpy(hist->params, sqlite3_column_blob(stmt, 4), hist->module->params_size);
     }
+/* Begin EFH masks_history */
+    // read masks (if any)
+    hist->forms = _read_history_masks(dev, imgid, num);
+/* End EFH masks_history */
 
     // make sure that always-on modules are always on. duh.
     if(hist->module->default_enabled == 1 && hist->module->hide_enable_button == 1)
@@ -1216,10 +1942,98 @@ void dt_dev_read_history(dt_develop_t *dev)
 
     /* signal history changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+/* Begin EFH masks_history */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
+/* End EFH masks_history */
   }
   sqlite3_finalize(stmt);
 }
 
+/* Begin EFH masks_history */
+void dt_dev_compress_mask_history(dt_develop_t *dev)
+{
+  dt_dev_history_item_t *hist_last = NULL;
+  dt_dev_history_item_t *hist_mm = NULL;
+  GList *history_new = NULL;
+  
+  // remove masks from all entries but last one
+  GList *history = dev->history;
+  while (history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    if (hist->forms)
+    {
+      if (hist_last)
+      {
+        g_list_free_full(hist_last->forms, (void (*)(void *))dt_masks_free_form);
+        hist_last->forms = NULL;
+      }
+      hist_last = hist;
+    }
+    
+    history = g_list_next(history);
+  }
+
+  // if there's an entry with masks and is not a mask manager create one
+  if (hist_last)
+  {
+    if (hist_last->hist_type != DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+    {
+      hist_mm = (dt_dev_history_item_t *)malloc(sizeof(dt_dev_history_item_t));
+      hist_mm->hist_type = DT_DEV_HISTORY_TYPE_MASK_MANAGER;
+      hist_mm->focus_hash = 0;
+      hist_mm->enabled = 1;
+      hist_mm->module = NULL;
+      hist_mm->params = NULL;
+      hist_mm->multi_priority = 0;
+      snprintf(hist_mm->multi_name, sizeof(hist_mm->multi_name), "%s", dt_dev_history_mm_item_name_translated());
+      hist_mm->blend_params = NULL;
+
+      hist_mm->forms = hist_last->forms;
+
+      hist_last->forms = NULL;
+      
+      dev->history_end++;
+    }
+    else
+    {
+      hist_mm = hist_last;
+    }
+  }
+  
+  // recreate history list with the new mask manager first and delete all other mask manager
+  if (hist_mm)
+  {
+    history_new = g_list_append(history_new, hist_mm);
+  }
+  
+  history = dev->history;
+  while (history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    
+    if (hist->hist_type == DT_DEV_HISTORY_TYPE_MASK_MANAGER)
+    {
+      if (hist != hist_mm)
+      {
+        dt_dev_free_history_item(hist);
+        hist = NULL;
+        
+        dev->history_end--;
+      }
+    }
+    else
+    {
+      history_new = g_list_append(history_new, hist);
+    }
+    
+    history = g_list_next(history);
+  }
+
+  if (dev->history) g_list_free(dev->history);
+  dev->history = history_new;
+}
+/* End EFH masks_history */
 
 void dt_dev_reprocess_all(dt_develop_t *dev)
 {
@@ -1346,9 +2160,20 @@ void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev, const float px, const float 
 
 void dt_dev_get_history_item_label(dt_dev_history_item_t *hist, char *label, const int cnt)
 {
+/* Begin EFH masks_history */
+  if (hist->hist_type == DT_DEV_HISTORY_TYPE_IOP)
+  {
+/* End EFH masks_history */
   gchar *module_label = dt_history_item_get_name(hist->module);
   g_snprintf(label, cnt, "%s (%s)", module_label, hist->enabled ? _("on") : _("off"));
   g_free(module_label);
+/* Begin EFH masks_history */
+  }
+  else
+  {
+    g_snprintf(label, cnt, "%s", dt_dev_history_mm_item_name_translated());
+  }
+/* End EFH masks_history */
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, uint32_t imgid)
@@ -1644,6 +2469,9 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     /* signal that history has changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_REMOVE, module);
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+/* Begin EFH masks_history */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_REFRESH_HISTORY);
+/* End EFH masks_history */
     /* redraw */
     dt_control_queue_redraw_center();
   }

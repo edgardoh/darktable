@@ -864,7 +864,8 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   }
   
   // else, we create a new from group with the shapes and display it
-  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+//  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create(darktable.develop, DT_MASKS_GROUP);
   for (int i = 0; i < RETOUCH_NO_FORMS; i++)
   {
     if (p->rt_forms[i].scale == scale)
@@ -884,7 +885,8 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     }
   }
 
-  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+//  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp2 = dt_masks_create(darktable.develop, DT_MASKS_GROUP);
   grp2->formid = 0;
   dt_masks_group_ungroup(grp2, grp);
   dt_masks_change_form_gui(grp2);
@@ -2185,9 +2187,9 @@ static gboolean rt_add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_i
     // we create the new form
     dt_masks_form_t *spot = NULL;
     if (p->algorithm == dt_iop_retouch_clone || p->algorithm == dt_iop_retouch_heal)
-      spot = dt_masks_create(type | DT_MASKS_CLONE);
+      spot = dt_masks_create(darktable.develop, type | DT_MASKS_CLONE);
     else
-      spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
+      spot = dt_masks_create(darktable.develop, type | DT_MASKS_NON_CLONE);
 
     dt_masks_change_form_gui(spot);
     darktable.develop->form_gui->creation = TRUE;
@@ -2242,9 +2244,9 @@ static void rt_select_algorithm_callback(GtkToggleButton *togglebutton, dt_iop_m
 
     dt_masks_form_t *spot = NULL;
     if (p->algorithm == dt_iop_retouch_clone || p->algorithm == dt_iop_retouch_heal)
-      spot = dt_masks_create(type | DT_MASKS_CLONE);
+      spot = dt_masks_create(darktable.develop, type | DT_MASKS_CLONE);
     else
-      spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
+      spot = dt_masks_create(darktable.develop, type | DT_MASKS_NON_CLONE);
     dt_masks_change_form_gui(spot);
 
     darktable.develop->form_gui->creation = TRUE;

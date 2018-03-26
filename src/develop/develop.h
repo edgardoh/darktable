@@ -31,6 +31,13 @@
 
 struct dt_iop_module_t;
 
+/* Begin EFH masks_history */
+typedef enum dt_dev_history_item_type_t
+{
+  DT_DEV_HISTORY_TYPE_IOP = 0,
+  DT_DEV_HISTORY_TYPE_MASK_MANAGER = 1
+} dt_dev_history_item_type_t;
+/* End EFH masks_history */
 typedef struct dt_dev_history_item_t
 {
   struct dt_iop_module_t *module; // pointer to image operation module
@@ -40,6 +47,10 @@ typedef struct dt_dev_history_item_t
   int multi_priority;
   char multi_name[128];
   int32_t focus_hash;             // used to determine whether or not to start a new item or to merge down
+/* Begin EFH masks_history */
+  int hist_type;
+  GList *forms; // snapshot of dt_develop_t->forms
+/* End EFH masks_history */
 } dt_dev_history_item_t;
 
 typedef enum dt_dev_overexposed_colorscheme_t
@@ -274,6 +285,19 @@ void dt_dev_reload_image(dt_develop_t *dev, const uint32_t imgid);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, uint32_t imgid);
 void dt_dev_add_history_item(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+/* Begin EFH masks_history */
+void dt_dev_add_maks_history_item(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+void dt_dev_compress_mask_history(dt_develop_t *dev);
+
+inline const char *dt_dev_history_mm_item_name()
+{
+  return "mask manager";
+}
+inline const char *dt_dev_history_mm_item_name_translated()
+{
+  return _("mask manager");
+}
+/* End EFH masks_history */
 void dt_dev_reload_history_items(dt_develop_t *dev);
 void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt);
 void dt_dev_write_history(dt_develop_t *dev);

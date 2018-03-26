@@ -383,13 +383,20 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   sqlite3_finalize(stmt);
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "INSERT INTO main.history (imgid, num, module, operation, op_params, enabled, "
-                              "blendop_params, blendop_version, multi_priority, multi_name) VALUES "
-                              "(?1, ?2, ?3, 'flip', ?4, 1, NULL, 0, 0, '') ",
+/* Begin EFH masks_history */
+//                              "blendop_params, blendop_version, multi_priority, multi_name) VALUES "
+//                              "(?1, ?2, ?3, 'flip', ?4, 1, NULL, 0, 0, '') ",
+                              "blendop_params, blendop_version, multi_priority, multi_name, hist_type) VALUES "
+                              "(?1, ?2, ?3, 'flip', ?4, 1, NULL, 0, 0, '', ?5) ",
+/* End EFH masks_history */
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, iop_flip_MODVER);
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, &orientation, sizeof(int32_t), SQLITE_TRANSIENT);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, DT_DEV_HISTORY_TYPE_IOP);
+/* End EFH masks_history */
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
@@ -640,6 +647,13 @@ void dt_image_remove(const int32_t imgid)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+/* Begin EFH masks_history */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+/* End EFH masks_history */
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
