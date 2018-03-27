@@ -105,7 +105,10 @@ typedef struct dt_control_accels_t
   GtkAccelKey filmstrip_forward, filmstrip_back, lighttable_up, lighttable_down, lighttable_right, lighttable_left,
       lighttable_center, lighttable_preview, lighttable_preview_display_focus, lighttable_preview_sticky,
       lighttable_preview_sticky_focus, lighttable_preview_sticky_exit, global_sideborders, global_header,
-      darkroom_preview, slideshow_start, global_zoom_in, global_zoom_out;
+/* Begin EFH */
+//      darkroom_preview, slideshow_start, global_zoom_in, global_zoom_out;
+      darkroom_preview, slideshow_start, global_zoom_in, global_zoom_out, darkroom_skip_mouse_events;
+/* End EFH */
 
 } dt_control_accels_t;
 

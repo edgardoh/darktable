@@ -112,6 +112,10 @@ typedef struct dt_opencl_device_t
 
 struct dt_bilateral_cl_global_t;
 struct dt_local_laplacian_cl_global_t;
+/* Begin EFH */
+struct dt_dwt_cl_global_t; // wavelet decompose
+struct dt_heal_cl_global_t; // healing
+/* End EFH */
 /**
  * main struct, stored in darktable.opencl.
  * holds pointers to all
@@ -156,6 +160,13 @@ typedef struct dt_opencl_t
 
   // global kernels for local laplacian filter.
   struct dt_local_laplacian_cl_global_t *local_laplacian;
+/* Begin EFH */
+  // global kernels for dwt filter.
+  struct dt_dwt_cl_global_t *dwt;
+  
+  // global kernels for heal filter.
+  struct dt_heal_cl_global_t *heal;
+/* End EFH */
 } dt_opencl_t;
 
 /** description of memory requirements of local buffer
