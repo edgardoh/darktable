@@ -2502,7 +2502,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       dt_masks_set_edit_mode(self, DT_MASKS_EDIT_OFF);
     }
     
-    dt_dev_reprocess_all(self->dev);
+//    dt_dev_reprocess_all(self->dev);
   }
 }
 
