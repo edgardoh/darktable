@@ -124,6 +124,8 @@ typedef struct
   int height_fft;
   int width_fft_complex;
   int height_fft_complex;
+
+  dt_pthread_mutex_t *fftw3_lock;
 } fbw_fft_t;
 
 #else
@@ -187,11 +189,17 @@ typedef struct dt_iop_fbw_gui_data_t
   GtkWidget *sl_red;
   GtkWidget *sl_green;
   GtkWidget *sl_blue;
+  GtkWidget *vbox_rgb;
   GtkWidget *levels_bar;
   GtkWidget *bt_auto_levels;
 } dt_iop_fbw_gui_data_t;
 
 typedef struct dt_iop_fbw_params_t dt_iop_fbw_data_t;
+
+typedef struct dt_iop_fbw_global_data_t
+{
+  dt_pthread_mutex_t fftw3_lock;
+} dt_iop_fbw_global_data_t;
 
 const char *name()
 {
@@ -291,6 +299,20 @@ static void clamp_minmax(float levels_old[3], float levels_new[3])
     levels_new[1] = left + (right - left) * percentage;
     levels_new[0] = left;
     levels_new[2] = right;
+  }
+}
+
+static void show_hide_controls(dt_iop_module_t *self, dt_iop_fbw_gui_data_t *d, dt_iop_fbw_params_t *p)
+{
+  switch(p->bw_method)
+  {
+    case dt_iop_fbw_bw_mix:
+      gtk_widget_show(GTK_WIDGET(d->vbox_rgb));
+      break;
+    default:
+    case dt_iop_fbw_bw_max:
+      gtk_widget_hide(GTK_WIDGET(d->vbox_rgb));
+      break;
   }
 }
 
@@ -583,8 +605,16 @@ static void bw_method_callback(GtkComboBox *combo, dt_iop_module_t *self)
 {
   if(darktable.gui->reset) return;
   dt_iop_fbw_params_t *p = (dt_iop_fbw_params_t *)self->params;
+  dt_iop_fbw_gui_data_t *g = (dt_iop_fbw_gui_data_t *)self->gui_data;
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
 
   p->bw_method = dt_bauhaus_combobox_get((GtkWidget *)combo);
+
+  show_hide_controls(self, g, p);
+
+  darktable.gui->reset = reset;
 
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
@@ -685,6 +715,8 @@ void gui_update(struct dt_iop_module_t *self)
 
   gtk_widget_queue_draw(GTK_WIDGET(g->levels_bar));
 
+  show_hide_controls(self, g, p);
+
   dt_pthread_mutex_lock(&g->lock);
   g->l_min = NAN;
   g->l_max = NAN;
@@ -695,7 +727,10 @@ void gui_update(struct dt_iop_module_t *self)
 
 void init_global(dt_iop_module_so_t *module)
 {
-  module->data = NULL;
+  dt_iop_fbw_global_data_t *gd = (dt_iop_fbw_global_data_t *)malloc(sizeof(dt_iop_fbw_global_data_t));
+  module->data = gd;
+
+  dt_pthread_mutex_init(&gd->fftw3_lock, NULL);
 
 // FIXME: this should go into dt startup
 #ifdef HAVE_FFTW3_OMP
@@ -709,7 +744,9 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  module->data = NULL;
+  dt_iop_fbw_global_data_t *gd = (dt_iop_fbw_global_data_t *)module->data;
+
+  dt_pthread_mutex_destroy(&gd->fftw3_lock);
 
 // FIXME: this should go into dt cleanup
 #ifdef HAVE_FFTW3_OMP
@@ -720,6 +757,9 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 #endif
 #endif
+
+  free(module->data);
+  module->data = NULL;
 }
 
 void init(dt_iop_module_t *module)
@@ -797,26 +837,30 @@ void gui_init(struct dt_iop_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), g->sl_oddness, TRUE, TRUE, 0);
 
+  g->vbox_rgb = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
   g->sl_red = dt_bauhaus_slider_new_with_range(self, -2.0, 2.0, 0.005, p->red, 3);
   dt_bauhaus_widget_set_label(g->sl_red, _("red"), _("red"));
   g_object_set(g->sl_red, "tooltip-text", _("red."), (char *)NULL);
   g_signal_connect(G_OBJECT(g->sl_red), "value-changed", G_CALLBACK(red_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->sl_red, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g->vbox_rgb), g->sl_red, TRUE, TRUE, 0);
 
   g->sl_green = dt_bauhaus_slider_new_with_range(self, -2.0, 2.0, 0.005, p->green, 3);
   dt_bauhaus_widget_set_label(g->sl_green, _("green"), _("green"));
   g_object_set(g->sl_green, "tooltip-text", _("green."), (char *)NULL);
   g_signal_connect(G_OBJECT(g->sl_green), "value-changed", G_CALLBACK(green_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->sl_green, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g->vbox_rgb), g->sl_green, TRUE, TRUE, 0);
 
   g->sl_blue = dt_bauhaus_slider_new_with_range(self, -2.0, 2.0, 0.005, p->blue, 3);
   dt_bauhaus_widget_set_label(g->sl_blue, _("blue"), _("blue"));
   g_object_set(g->sl_blue, "tooltip-text", _("blue."), (char *)NULL);
   g_signal_connect(G_OBJECT(g->sl_blue), "value-changed", G_CALLBACK(blue_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->sl_blue, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g->vbox_rgb), g->sl_blue, TRUE, TRUE, 0);
+
+  gtk_box_pack_start(GTK_BOX(self->widget), g->vbox_rgb, TRUE, TRUE, 0);
 
   GtkWidget *prev_lvl = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
@@ -846,6 +890,9 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(prev_lvl), GTK_WIDGET(g->levels_bar), TRUE, TRUE, 0);
 
   gtk_box_pack_start(GTK_BOX(self->widget), prev_lvl, TRUE, TRUE, 0);
+
+  gtk_widget_show_all(g->vbox_rgb);
+  gtk_widget_set_no_show_all(g->vbox_rgb, TRUE);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
@@ -877,8 +924,11 @@ static void check_nan(const float *im, const int size, const char *str)
 
 #ifdef HAVE_FFTW3
 
-static void fft(fbw_fft_t *fft_fbw, float *image_src, const int width, const int height)
+static void fft(fbw_fft_t *fft_fbw, float *image_src, const int width, const int height,
+                dt_pthread_mutex_t *fftw3_lock)
 {
+  fft_fbw->fftw3_lock = fftw3_lock;
+
   fft_fbw->width_src = width;
   fft_fbw->height_src = height;
 
@@ -891,7 +941,7 @@ static void fft(fbw_fft_t *fft_fbw, float *image_src, const int width, const int
   fft_fbw->width_fft_complex = fft_fbw->width_fft / 2 + 1;
   fft_fbw->height_fft_complex = fft_fbw->height_fft;
 
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(fft_fbw->fftw3_lock);
 
   fft_fbw->in_src = (float *)fftwf_malloc(sizeof(float) * fft_fbw->width_fft * fft_fbw->height_fft);
   fft_fbw->out_src = (fftwf_complex *)fftwf_malloc(sizeof(fftwf_complex) * fft_fbw->width_fft_complex
@@ -902,7 +952,7 @@ static void fft(fbw_fft_t *fft_fbw, float *image_src, const int width, const int
   fft_fbw->plan_inv = fftwf_plan_dft_c2r_2d(fft_fbw->height_fft, fft_fbw->width_fft, fft_fbw->out_src,
                                             fft_fbw->in_src, FFTW_ESTIMATE);
 
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(fft_fbw->fftw3_lock);
 
   memset(fft_fbw->in_src, 0, sizeof(float) * fft_fbw->width_fft * fft_fbw->height_fft);
   memset(fft_fbw->out_src, 0, sizeof(fftwf_complex) * fft_fbw->width_fft_complex * fft_fbw->height_fft_complex);
@@ -959,7 +1009,7 @@ static void ifft(fbw_fft_t *fft_fbw, float *image_dest)
 
 static void fft_free(fbw_fft_t *fft_fbw)
 {
-  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_lock(fft_fbw->fftw3_lock);
 
   if(fft_fbw->plan_src) fftwf_destroy_plan(fft_fbw->plan_src);
   if(fft_fbw->plan_inv) fftwf_destroy_plan(fft_fbw->plan_inv);
@@ -967,7 +1017,7 @@ static void fft_free(fbw_fft_t *fft_fbw)
   if(fft_fbw->in_src) fftwf_free(fft_fbw->in_src);
   if(fft_fbw->out_src) fftwf_free(fft_fbw->out_src);
 
-  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+  dt_pthread_mutex_unlock(fft_fbw->fftw3_lock);
 
   fft_fbw->plan_src = NULL;
   fft_fbw->plan_inv = NULL;
@@ -1418,11 +1468,12 @@ cleanup:
   if(img_bp) dt_free_align(img_bp);
 }
 
-static void recontruct_laplacian(float *img_src, float *img_dest, const int width, const int height)
+static void recontruct_laplacian(float *img_src, float *img_dest, const int width, const int height,
+                                 dt_pthread_mutex_t *fftw3_lock)
 {
   fbw_fft_t fft_fbw = { 0 };
 
-  fft(&fft_fbw, img_src, width, height);
+  fft(&fft_fbw, img_src, width, height, fftw3_lock);
 
   const int width_fft = fft_fbw.width_fft;
   const int height_fft = fft_fbw.height_fft;
@@ -1470,6 +1521,8 @@ static void fbw_process(float *img_src, float *img_dest, const int width, const 
                         const float green, const float blue, const float image_scale, dt_iop_fbw_gui_data_t *g,
                         dt_dev_pixelpipe_iop_t *piece, struct dt_iop_module_t *self)
 {
+  dt_iop_fbw_global_data_t *gd = (dt_iop_fbw_global_data_t *)self->data;
+
   float *img_padded = NULL;
   float *img_grx = NULL;
   float *img_gry = NULL;
@@ -1563,7 +1616,7 @@ static void fbw_process(float *img_src, float *img_dest, const int width, const 
 
   estimate_laplacian(img_grx, img_gry, img_l, iwidth, iheight, pad_w, pad_h);
 
-  recontruct_laplacian(img_l, img_l, iwidth, iheight);
+  recontruct_laplacian(img_l, img_l, iwidth, iheight, &(gd->fftw3_lock));
 
   float *img_unpad_gr = img_grx;
 
