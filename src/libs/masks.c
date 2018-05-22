@@ -1279,7 +1279,11 @@ static int _is_form_used(int formid, dt_masks_form_t *grp, char *text, size_t te
           if(nb > 1) g_strlcat(text, "\n", text_length);
           g_strlcat(text, grp->name, text_length);
         }
-        if(form->type & DT_MASKS_GROUP) nb += _is_form_used(formid, form, text, text_length);
+        /* Begin EFH */
+        // stop infinite recurs
+//        if(form->type & DT_MASKS_GROUP) nb += _is_form_used(formid, form, text, text_length);
+        if((form->type & DT_MASKS_GROUP) && (form != grp)) nb += _is_form_used(formid, form, text, text_length);
+        /* End EFH */
       }
       points = g_list_next(points);
     }
