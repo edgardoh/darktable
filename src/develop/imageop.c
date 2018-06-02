@@ -1395,6 +1395,9 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
 {
   uint64_t hash = 5381;
   piece->hash = 0;
+  /* Begin EFH */
+  memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
+  /* End EFH */
   if(piece->enabled)
   {
     /* construct module params data for hash calc */
@@ -1414,7 +1417,10 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
     }
     memcpy(piece->blendop_data, blendop_params, sizeof(dt_develop_blend_params_t));
     // this should be redundant! (but is not)
-    memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
+    /* Begin EFH */
+    // if the last on the pipe is disabled we still need to copy blen_params, so move it up
+    // memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
+    /* End EFH */
     /* and we add masks */
     dt_masks_group_get_hash_buffer(grp, str + pos);
 
