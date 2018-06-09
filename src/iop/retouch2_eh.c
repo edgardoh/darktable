@@ -3360,16 +3360,16 @@ void connect_key_accels(dt_iop_module_t *module)
   GClosure *closure;
 
   closure = g_cclosure_new(G_CALLBACK(_add_circle_key_accel), (gpointer)module, NULL);
-  dt_accel_connect_iop (module, "circle tool", closure);
+  dt_accel_connect_iop(module, "retouch circle tool", closure);
 
   closure = g_cclosure_new(G_CALLBACK(_add_ellipse_key_accel), (gpointer)module, NULL);
-  dt_accel_connect_iop (module, "elipse tool", closure);
+  dt_accel_connect_iop(module, "retouch elipse tool", closure);
 
   closure = g_cclosure_new(G_CALLBACK(_add_brush_key_accel), (gpointer)module, NULL);
-  dt_accel_connect_iop (module, "brush tool", closure);
+  dt_accel_connect_iop(module, "retouch brush tool", closure);
 
   closure = g_cclosure_new(G_CALLBACK(_add_path_key_accel), (gpointer)module, NULL);
-  dt_accel_connect_iop (module, "path tool", closure);
+  dt_accel_connect_iop(module, "retouch path tool", closure);
 }
 
 //--------------------------------------------------------------------------------------------------
