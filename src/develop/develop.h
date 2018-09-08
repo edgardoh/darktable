@@ -150,6 +150,10 @@ typedef struct dt_develop_t
   // operations pipeline
   int32_t iop_instance;
   GList *iop;
+  /* Begin EFH */
+  // iop's to be deleted
+  GList *alliop;
+  /* End EFH */
 
   // histogram for display.
   uint32_t *histogram, *histogram_pre_tonecurve, *histogram_pre_levels;

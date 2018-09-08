@@ -29,6 +29,9 @@
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
 #include "develop/tiling.h"
+/* Begin EFH */
+#include "develop/masks.h"
+/* End EFH */
 #include "gui/gtk.h"
 #include "libs/colorpicker.h"
 #include "libs/lib.h"
@@ -152,6 +155,10 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe, size_t size, int32_t 
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
+  /* Begin EFH */
+  pipe->iop = NULL;
+  pipe->forms = NULL;
+  /* End EFH */
 
   return 1;
 }
@@ -190,6 +197,13 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
   pipe->icc_filename = NULL;
+  /* Begin EFH */
+  if (pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
+  /* End EFH */
 }
 
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
@@ -214,6 +228,14 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   }
   g_list_free(pipe->nodes);
   pipe->nodes = NULL;
+  /* Begin EFH */
+  // also cleanup iop here
+  if(pipe->iop)
+  {
+    g_list_free(pipe->iop);
+    pipe->iop = NULL;
+  }
+  /* End EFH */
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
 
@@ -222,6 +244,9 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   pipe->shutdown = 0;
   g_assert(pipe->nodes == NULL);
+  /* Begin EFH */
+  g_assert(pipe->iop == NULL);
+  /* End EFH */
   // for all modules in dev:
   GList *modules = dev->iop;
   while(modules)
@@ -250,6 +275,9 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       dt_iop_init_pipe(piece->module, pipe, piece);
       pipe->nodes = g_list_append(pipe->nodes, piece);
     }
+    /* Begin EFH */
+    pipe->iop = g_list_append(pipe->iop, module);
+    /* End EFH */
     modules = g_list_next(modules);
   }
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
@@ -2265,9 +2293,21 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // printf("pixelpipe homebrew process start\n");
   if(darktable.unmuted & DT_DEBUG_DEV) dt_dev_pixelpipe_cache_print(&pipe->cache);
 
+  /* Begin EFH */
+  // get a snapshot of mask list
+  if (pipe->forms) g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+  pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+  /* End EFH */
+
   //  go through list of modules from the end:
+  /* Begin EFH */
+/*  
   guint pos = g_list_length(dev->iop);
   GList *modules = g_list_last(dev->iop);
+*/
+  guint pos = g_list_length(pipe->iop);
+  GList *modules = g_list_last(pipe->iop);
+  /* End EFH */
   GList *pieces = g_list_last(pipe->nodes);
 
 // re-entry point: in case of late opencl errors we start all over again with opencl-support disabled
@@ -2329,6 +2369,13 @@ restart:
   }
 
   // release resources:
+  /* Begin EFH */
+  if (pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
+  /* End EFH */
   if(pipe->devid >= 0)
   {
     dt_opencl_unlock_device(pipe->devid);
@@ -2365,7 +2412,12 @@ void dt_dev_pixelpipe_get_dimensions(dt_dev_pixelpipe_t *pipe, struct dt_develop
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out;
+  /* Begin EFH */
+/*  
   GList *modules = dev->iop;
+*/
+  GList *modules = pipe->iop;
+  /* End EFH */
   GList *pieces = pipe->nodes;
   while(modules)
   {

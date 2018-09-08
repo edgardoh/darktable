@@ -547,11 +547,16 @@ static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *modul
   // we remove all references in the history stack and dev->iop
   dt_dev_module_remove(dev, module);
 
+  /* Begin EFH */
+  // pipe will be recreated below
+/*  
   // we recreate the pipe
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
   dt_dev_pixelpipe_create_nodes(dev->pipe, dev);
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
+*/  
+  /* End EFH */
 
   // if module was priority 0, then we set next to priority 0
   if(is_zero)
@@ -573,8 +578,14 @@ static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *modul
   dt_accel_disconnect_list(module->accel_closures);
   dt_accel_cleanup_locals_iop(module);
   module->accel_closures = NULL;
+  /* Begin EFH */
+/*  
   dt_iop_cleanup_module(module);
   free(module);
+*/
+  // don't delete the module, a pipe may still need it
+  dev->alliop = g_list_append(dev->alliop, module);
+  /* End EFH */
   module = NULL;
 
   // we update show params for multi-instances for each other instances

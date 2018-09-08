@@ -130,6 +130,12 @@ typedef struct dt_dev_pixelpipe_t
   dt_colorspaces_color_profile_type_t icc_type;
   gchar *icc_filename;
   dt_iop_color_intent_t icc_intent;
+  /* Begin EFH */
+  // snapshot of modules
+  GList *iop;
+  // snapshot of mask list
+  GList *forms;
+  /* End EFH */
 } dt_dev_pixelpipe_t;
 
 struct dt_develop_t;

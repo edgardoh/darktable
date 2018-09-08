@@ -622,6 +622,15 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       free(module);
     }
   }
+  /* Begin EFH */
+  // we also clear the saved modules
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
+  }
+  /* End EFH */
   dt_dev_pixelpipe_create_nodes(dev->pipe, dev);
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
   dt_masks_read_forms(dev);
@@ -1855,6 +1864,15 @@ void leave(dt_view_t *self)
     free(module);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
   }
+
+  /* Begin EFH */
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
+  }
+  /* End EFH */
 
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
