@@ -1020,6 +1020,31 @@ static void auto_apply_presets(dt_develop_t *dev)
   dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
 }
 
+/* Begin EFH */
+// replace a given module with another one
+// the module to be replaced must have a legacy_params() with old_version == new_version
+#define EH_REPLACE_MODULE
+#ifdef EH_REPLACE_MODULE
+dt_iop_module_t *retouch_eh_find_op(const char *opname, dt_develop_t *dev)
+{
+  dt_iop_module_t *find_op = NULL;
+  
+  GList *modules = dev->iop;
+  
+  while(find_op == NULL && modules)
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    if(!strcmp(module->op, opname))
+    {
+      find_op = module;
+    }
+    modules = g_list_next(modules);
+  }
+  return find_op;
+}
+#endif
+/* End EFH */
+
 void dt_dev_read_history(dt_develop_t *dev)
 {
   if(dev->image_storage.id <= 0) return;
@@ -1055,6 +1080,18 @@ void dt_dev_read_history(dt_develop_t *dev)
       continue;
     }
 
+    /* Begin EFH */
+#ifdef EH_REPLACE_MODULE
+    const char *opname_replace = NULL;
+    const char opname_retouch2_eh[] = "retouch";
+    if(opname && !strcmp(opname, "retouch2_eh"))
+    {
+      opname_replace = opname;
+      opname = opname_retouch2_eh;
+    }
+#endif
+    /* End EFH */
+    
     hist->module = NULL;
     dt_iop_module_t *find_op = NULL;
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
@@ -1138,6 +1175,22 @@ void dt_dev_read_history(dt_develop_t *dev)
       memcpy(hist->blend_params, hist->module->default_blendop_params, sizeof(dt_develop_blend_params_t));
     }
 
+    /* Begin EFH */
+#ifdef EH_REPLACE_MODULE
+    if (opname_replace)
+    {
+      dt_iop_module_t *module_replace = retouch_eh_find_op(opname_replace, dev);
+      
+      // convert the old params to new
+      if(module_replace->legacy_params(module_replace, sqlite3_column_blob(stmt, 4), labs(modversion), hist->params, labs(module_replace->version())))
+      {
+      }
+    }
+    else
+    {
+#endif
+    /* End EFH */
+      
     if(hist->module->version() != modversion || hist->module->params_size != sqlite3_column_bytes(stmt, 4)
        || strcmp((char *)sqlite3_column_text(stmt, 3), hist->module->op))
     {
@@ -1183,6 +1236,12 @@ void dt_dev_read_history(dt_develop_t *dev)
       memcpy(hist->params, sqlite3_column_blob(stmt, 4), hist->module->params_size);
     }
 
+    /* Begin EFH */
+#ifdef EH_REPLACE_MODULE
+    }
+#endif
+    /* End EFH */
+    
     // make sure that always-on modules are always on. duh.
     if(hist->module->default_enabled == 1 && hist->module->hide_enable_button == 1)
     {

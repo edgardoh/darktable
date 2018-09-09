@@ -400,6 +400,11 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "description DESC, filename DESC, version DESC");
         break;
 
+        /* Begin EFH */
+      case DT_COLLECTION_SORT_IOP_EH:
+        sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "operation DESC");
+        break;
+        /* End EFH */
       case DT_COLLECTION_SORT_NONE:
         // shouldn't happen
         break;
@@ -441,6 +446,12 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "position, filename, version");
         break;
 
+        /* Begin EFH */
+      case DT_COLLECTION_SORT_IOP_EH:
+        sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "operation");
+        break;
+        /* End EFH */
+        
       case DT_COLLECTION_SORT_TITLE:
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "caption, filename, version");
         break;
@@ -903,6 +914,14 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
                               (strcmp(escaped_text, _("altered")) == 0) ? "" : "not");
       break;
 
+      /* Begin EFH */
+    case DT_COLLECTION_PROP_IOP_EH: // module iop
+    	if(!(escaped_text && *escaped_text))
+    		query = dt_util_dstrcat(query, "(id IN (SELECT imgid FROM main.history WHERE imgid=images.id AND operation LIKE '%s%%'))", escaped_text);
+    	else
+    		query = dt_util_dstrcat(query, "(id IN (SELECT imgid FROM main.history WHERE imgid=images.id AND operation LIKE '%s'))", escaped_text);
+      break;
+      /* End EFH */
     case DT_COLLECTION_PROP_GEOTAGGING: // geotagging
       query = dt_util_dstrcat(query, "(id %s IN (SELECT id AS imgid FROM main.images WHERE "
                                      "(longitude IS NOT NULL AND latitude IS NOT NULL))) ",

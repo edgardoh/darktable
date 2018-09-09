@@ -1248,6 +1248,13 @@ static void list_view(dt_lib_collect_rule_t *dr)
                 "FROM main.images WHERE %s GROUP BY filename ORDER BY filename", where_ext);
         break;
 
+        /* Begin EFH */
+      case DT_COLLECTION_PROP_IOP_EH: // IOP
+        g_snprintf(query, sizeof(query), "SELECT operation, 1, COUNT(*) AS count "
+                "FROM main.history WHERE %s GROUP BY operation ORDER BY operation", where_ext);
+        break;
+        /* End EFH */
+        
       default: // filmroll
         g_snprintf(query, sizeof(query), "SELECT folder, film_rolls_id, COUNT(*) AS count "
                 "FROM main.images JOIN "
@@ -1312,7 +1319,12 @@ static void list_view(dt_lib_collect_rule_t *dr)
      || property == DT_COLLECTION_PROP_FILENAME || property == DT_COLLECTION_PROP_FILMROLL
      || property == DT_COLLECTION_PROP_LENS || property == DT_COLLECTION_PROP_PUBLISHER
      || property == DT_COLLECTION_PROP_RIGHTS || property == DT_COLLECTION_PROP_TIME
+     /* Begin EFH */
+/*     
      || property == DT_COLLECTION_PROP_TITLE || property == DT_COLLECTION_PROP_APERTURE
+*/     
+     /* End EFH */
+     || property == DT_COLLECTION_PROP_TITLE || property == DT_COLLECTION_PROP_APERTURE || property == DT_COLLECTION_PROP_IOP_EH
      || property == DT_COLLECTION_PROP_FOCAL_LENGTH || property == DT_COLLECTION_PROP_ISO))
     gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)list_match_string, dr);
   // we update list selection
@@ -2055,6 +2067,9 @@ void init(struct dt_lib_module_t *self)
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_FILENAME);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_GEOTAGGING);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_LOCAL_COPY);
+  /* Begin EFH */
+  luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_IOP_EH);
+  /* End EFH */
 
 }
 #endif
