@@ -1023,7 +1023,7 @@ static void auto_apply_presets(dt_develop_t *dev)
 /* Begin EFH */
 // replace a given module with another one
 // the module to be replaced must have a legacy_params() with old_version == new_version
-#define EH_REPLACE_MODULE
+// #define EH_REPLACE_MODULE
 #ifdef EH_REPLACE_MODULE
 dt_iop_module_t *retouch_eh_find_op(const char *opname, dt_develop_t *dev)
 {

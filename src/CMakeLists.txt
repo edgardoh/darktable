@@ -88,8 +88,6 @@ FILE(GLOB SOURCE_FILES
   "develop/tiling.c"
   "common/dwt.c"
   "common/heal.c"
-  "common/dwt_eh.c"
-  "common/heal_eh.c"
   "common/LocalLaplacian_eh.c"
   "develop/masks/masks.c"
   "develop/format.c"

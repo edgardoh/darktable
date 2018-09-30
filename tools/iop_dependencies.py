@@ -123,7 +123,6 @@ def add_edges(gr):
   gr.add_edge(('flip', 'lens'))
   gr.add_edge(('flip', 'spots'))
   gr.add_edge(('flip', 'retouch'))
-  gr.add_edge(('flip', 'retouch2_eh'))
   gr.add_edge(('flip', 'liquify'))
   gr.add_edge(('flip', 'ashift'))
   
@@ -251,19 +250,9 @@ def add_edges(gr):
   gr.add_edge(('borders', 'retouch'))
   gr.add_edge(('clipping', 'retouch'))
 
-  # retouch works on demosaiced data
-  # and needs to be before geometric distortions:
-  gr.add_edge(('retouch2_eh', 'demosaic'))
-  gr.add_edge(('scalepixels', 'retouch2_eh'))
-  gr.add_edge(('rotatepixels', 'retouch2_eh'))
-  gr.add_edge(('lens', 'retouch2_eh'))
-  gr.add_edge(('borders', 'retouch2_eh'))
-  gr.add_edge(('clipping', 'retouch2_eh'))
-
   # liquify immediately after spot removal / retouch
   gr.add_edge(('liquify', 'spots'))
   gr.add_edge(('liquify', 'retouch'))
-  gr.add_edge(('liquify', 'retouch2_eh'))
   gr.add_edge(('liquify', 'lens'))
   gr.add_edge(('rotatepixels', 'liquify'))
   gr.add_edge(('scalepixels', 'liquify'))
@@ -574,7 +563,6 @@ gr.add_nodes([
 'splittoning',
 'spots',
 'retouch',
-'retouch2_eh',
 'temperature',
 'tonecurve',
 'tonemap',
