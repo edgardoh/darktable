@@ -400,11 +400,6 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "description DESC, filename DESC, version DESC");
         break;
 
-        /* Begin EFH */
-      case DT_COLLECTION_SORT_IOP_EH:
-        sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "operation DESC");
-        break;
-        /* End EFH */
       case DT_COLLECTION_SORT_NONE:
         // shouldn't happen
         break;
@@ -446,12 +441,6 @@ gchar *dt_collection_get_sort_query(const dt_collection_t *collection)
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "position, filename, version");
         break;
 
-        /* Begin EFH */
-      case DT_COLLECTION_SORT_IOP_EH:
-        sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "operation");
-        break;
-        /* End EFH */
-        
       case DT_COLLECTION_SORT_TITLE:
         sq = dt_util_dstrcat(sq, ORDER_BY_QUERY, "caption, filename, version");
         break;
