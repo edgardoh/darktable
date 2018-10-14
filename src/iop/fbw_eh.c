@@ -168,6 +168,13 @@ typedef struct dt_iop_fbw_params_t
 
 typedef struct dt_iop_fbw_gui_data_t
 {
+  uint64_t hash;
+  dt_pthread_mutex_t lock;
+  float img_min_in;
+  float img_max_in;
+  float img_min_out;
+  float img_max_out;
+  
   GtkWidget *cmb_bw_method;
   GtkWidget *sl_oddness;
   GtkWidget *sl_red;
@@ -302,6 +309,14 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->sl_blue, p->blue);
 
   show_hide_controls(self, g, p);
+  
+  dt_pthread_mutex_lock(&g->lock);
+  g->img_min_in = NAN;
+  g->img_max_in = NAN;
+  g->img_min_out = NAN;
+  g->img_max_out = NAN;
+  g->hash = 0;
+  dt_pthread_mutex_unlock(&g->lock);
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -316,6 +331,7 @@ void init_global(dt_iop_module_so_t *module)
 #ifdef _OPENMP
 
   fftwf_init_threads();
+  fftwf_plan_with_nthreads(dt_get_num_threads());
 
 #endif
 #endif
@@ -332,7 +348,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 #ifdef _OPENMP
 
   fftwf_cleanup_threads();
-  fftwf_plan_with_nthreads(dt_get_num_threads());
+//  fftwf_plan_with_nthreads(dt_get_num_threads());
 
 #endif
 #endif
@@ -347,7 +363,8 @@ void init(dt_iop_module_t *module)
   module->params = calloc(1, sizeof(dt_iop_fbw_params_t));
   module->default_params = calloc(1, sizeof(dt_iop_fbw_params_t));
   module->default_enabled = 0;
-  module->priority = 161; // module order created by iop_dependencies.py, do not edit! // from exposure
+  //module->priority = 161; // module order created by iop_dependencies.py, do not edit! // from exposure
+  module->priority = 147; // module order created by iop_dependencies.py, do not edit! // from tonemap
   module->params_size = sizeof(dt_iop_fbw_params_t);
   module->gui_data = NULL;
 
@@ -375,6 +392,13 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui_data = malloc(sizeof(dt_iop_fbw_gui_data_t));
   dt_iop_fbw_gui_data_t *g = (dt_iop_fbw_gui_data_t *)self->gui_data;
   dt_iop_fbw_params_t *p = (dt_iop_fbw_params_t *)self->params;
+
+  dt_pthread_mutex_init(&g->lock, NULL);
+  g->hash = 0;
+  g->img_min_in = NAN;
+  g->img_max_in = NAN;
+  g->img_min_out = NAN;
+  g->img_max_out = NAN;
 
   self->widget = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE));
 
@@ -427,6 +451,10 @@ void gui_init(struct dt_iop_module_t *self)
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
+  dt_iop_fbw_gui_data_t *g = (dt_iop_fbw_gui_data_t *)self->gui_data;
+  
+  dt_pthread_mutex_destroy(&g->lock);
+  
   free(self->gui_data);
   self->gui_data = NULL;
 }
@@ -657,7 +685,7 @@ static void image_to_output(float *img_src, const int width, const int height, c
   }
 }
 
-static void pad_image_mix(float *img_src, const int width, const int height, const int ch, float *img_dest,
+static void pad_image_mix(const float *const img_src, const int width, const int height, const int ch, float *img_dest,
                           const int pad_w, const int pad_h, const float rgb[3])
 {
   const int iwidth = width + pad_w * 2;
@@ -666,11 +694,11 @@ static void pad_image_mix(float *img_src, const int width, const int height, con
   memset(img_dest, 0, iwidth * iheight * sizeof(float));
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) shared(img_src, img_dest, rgb) schedule(static)
+#pragma omp parallel for default(none) shared(img_dest, rgb) schedule(static)
 #endif
   for(int y = 0; y < height; y++)
   {
-    float *s = img_src + y * width * ch;
+    const float *const s = img_src + y * width * ch;
     float *d = img_dest + (y + pad_h) * iwidth + pad_w;
 
     for(int x = 0; x < width; x++)
@@ -680,7 +708,7 @@ static void pad_image_mix(float *img_src, const int width, const int height, con
   }
 }
 
-static void pad_image_max(float *img_src, const int width, const int height, const int ch, float *img_dest,
+static void pad_image_max(const float *const img_src, const int width, const int height, const int ch, float *img_dest,
                           const int pad_w, const int pad_h)
 {
   const int iwidth = width + pad_w * 2;
@@ -689,11 +717,11 @@ static void pad_image_max(float *img_src, const int width, const int height, con
   memset(img_dest, 0, iwidth * iheight * ch * sizeof(float));
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) shared(img_src, img_dest) schedule(static)
+#pragma omp parallel for default(none) shared(img_dest) schedule(static)
 #endif
   for(int y = 0; y < height; y++)
   {
-    float *s = img_src + y * width * ch;
+    const float *const s = img_src + y * width * ch;
     float *d = img_dest + (y + pad_h) * iwidth * ch + pad_w * ch;
 
     for(int x = 0; x < width; x++)
@@ -725,21 +753,32 @@ static void unpad_image(float *img_src, const int width, const int height, float
   }
 }
 
-static void normalize(float *img_src, const int width, const int height, const float L, const float H)
+static void normalize(float *img_src, const int width, const int height, float *img_min, float *img_max, const float L, const float H)
 {
   float min = INFINITY;
   float max = -INFINITY;
   const int stride = width * height;
 
+  if(isnan(*img_min) || isnan(*img_max))
+  {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) shared(img_src) schedule(static) reduction(min : min) reduction(max : max)
 #endif
-  for(int i = 0; i < stride; i++)
-  {
-    min = MIN(min, img_src[i]);
-    max = MAX(max, img_src[i]);
-  }
+    for(int i = 0; i < stride; i++)
+    {
+      min = MIN(min, img_src[i]);
+      max = MAX(max, img_src[i]);
+    }
 
+    *img_min = min;
+    *img_max = max;
+  }
+  else
+  {
+    min = *img_min;
+    max = *img_max;
+  }
+  
   if(min == max) return;
 
   const float mult = (H - L) / (max - min);
@@ -773,14 +812,13 @@ static void gradient_rgb_mix(float *img_src, float *img_grx, float *img_gry, con
 
     for(int x = 0; x < width - 1; x++)
     {
-      float grx = s0[x + 1] - s0[x];
-      float gry = s1[x] - s0[x];
+      float grx = fabsf(s0[x + 1]) - fabsf(s0[x]);
+      float gry = fabsf(s1[x]) - fabsf(s0[x]);
       float grn = /*sqrtf*/ ((grx * grx + gry * gry));
 
       if(grn > 0.f)
       {
         float n = powf(grn, oddness);
-
 
         dx[x] = grx / n;
         dy[x] = gry / n;
@@ -816,8 +854,8 @@ static void gradient_rgb_max(float *img_src, float *img_grx, float *img_gry, con
 
       for(int c = 0; c < 3; c++)
       {
-        RGBx[c] = s0[(x + 1) * ch + c] - s0[x * ch + c];
-        RGBy[c] = s1[x * ch + c] - s0[x * ch + c];
+        RGBx[c] = fabsf(s0[(x + 1) * ch + c]) - fabsf(s0[x * ch + c]);
+        RGBy[c] = fabsf(s1[x * ch + c]) - fabsf(s0[x * ch + c]);
 
         RGBn[c] = RGBx[c] * RGBx[c] + RGBy[c] * RGBy[c];
       }
@@ -1116,9 +1154,6 @@ static void recontruct_laplacian2(float *img_src, float *img_dest, const int wid
     for(int x = 0; x < width; x++)
     {
       const float cos_x = cosf(piw * (float)(x + 1));
-
-      //      const float cos_xy = (2.f*cosf(M_PI*(float)(x+1)/(float)(width-1))-2.f) +
-      //      (2.f*cosf(M_PI*(float)(y+1)/(float)(height-1)) - 2.f);
       const float cos_xy = 2.f * (cos_y + cos_x) - 4.f;
       if(cos_xy != 0.f) d[x] /= cos_xy;
     }
@@ -1130,16 +1165,39 @@ cleanup:
   if(img_dst) dt_free_align(img_dst);
 }
 
-static void fbw_process(float *img_src, float *img_dest, const int width, const int height, const int ch,
+static void get_stats(const float *const img_src, const int width, const int height, const int ch, float *_min, float *_max)
+{
+  float min = INFINITY;
+  float max = -INFINITY;
+  
+  const int stride = width * height * ch;
+  const int ch1 = (ch==4)?3:ch;
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) schedule(static) reduction(min : min) reduction(max : max)
+#endif
+  for(int i = 0; i < stride; i+=ch)
+  {
+    for (int c = 0; c < ch1; c++)
+    {
+      min = MIN(min, img_src[i+c]);
+      max = MAX(max, img_src[i+c]);
+    }
+  }
+
+  *_min = min;
+  *_max = max;
+}
+
+static void fbw_process(const float *const img_src, float *const img_dest, const int width, const int height, const int ch,
                         const int bw_method, const float oddness, const float red, const float green,
-                        const float blue, const float image_scale, dt_pthread_mutex_t *fftw3_lock)
+                        const float blue, float *img_min_in, float *img_max_in, float *img_min_out, float *img_max_out,
+                        const float image_scale, dt_pthread_mutex_t *fftw3_lock)
 {
   float *img_padded = NULL;
   float *img_grx = NULL;
   float *img_gry = NULL;
 
-  //  const int pad_w = (bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_max)?(MIN(width, height) /
-  //  2):2;
   const int pad_w = 1;
   const int pad_h = pad_w;
 
@@ -1148,6 +1206,9 @@ static void fbw_process(float *img_src, float *img_dest, const int width, const 
 
   const float rgb[3] = { red, green, blue };
 
+  if(isnan(*img_min_in) || isnan(*img_max_in))
+    get_stats(img_src, width, height, ch, img_min_in, img_max_in);
+  
   img_grx = dt_alloc_align(64, iwidth * iheight * sizeof(float));
   if(img_grx == NULL) goto cleanup;
 
@@ -1181,7 +1242,7 @@ static void fbw_process(float *img_src, float *img_dest, const int width, const 
 
   unpad_image(img_gry, width, height, img_grx, pad_w, pad_h);
 
-  normalize(img_grx, width, height, 0.f, 1.f);
+  normalize(img_grx, width, height, img_min_out, img_max_out, *img_min_in, *img_max_in);
 
   image_to_output(img_grx, width, height, ch, img_dest);
 
@@ -1195,11 +1256,48 @@ void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piec
                       void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_fbw_data_t *const p = (const dt_iop_fbw_data_t *const)piece->data;
+  dt_iop_fbw_gui_data_t *g = (dt_iop_fbw_gui_data_t *)self->gui_data;
   dt_iop_fbw_global_data_t *gd = (dt_iop_fbw_global_data_t *)self->data;
   const float image_scale = roi_in->scale / piece->iscale;
 
+  float img_min_in = NAN;
+  float img_max_in = NAN;
+  float img_min_out = NAN;
+  float img_max_out = NAN;
+  
+  // get image range from full pipe
+  if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+  {
+    dt_pthread_mutex_lock(&g->lock);
+    const uint64_t hash = g->hash;
+    dt_pthread_mutex_unlock(&g->lock);
+
+    if(hash != 0 && !dt_dev_sync_pixelpipe_hash(self->dev, piece->pipe, 0, self->priority, &g->lock, &g->hash))
+      dt_control_log(_("[freaky b&w] inconsistent output"));
+
+    dt_pthread_mutex_lock(&g->lock);
+    img_min_in = g->img_min_in;
+    img_max_in = g->img_max_in;
+    img_min_out = g->img_min_out;
+    img_max_out = g->img_max_out;
+    dt_pthread_mutex_unlock(&g->lock);
+  }
+
   fbw_process((float *)ivoid, (float *)ovoid, roi_in->width, roi_in->height, piece->colors, p->bw_method,
-              p->oddness / 100.f, p->red, p->green, p->blue, image_scale, &(gd->fftw3_lock));
+              p->oddness / 100.f, p->red, p->green, p->blue, &img_min_in, &img_max_in, &img_min_out, &img_max_out, image_scale, &(gd->fftw3_lock));
+
+  // if preview pipe, store the image range
+  if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  {
+    uint64_t hash = dt_dev_hash_plus(self->dev, piece->pipe, 0, self->priority);
+    dt_pthread_mutex_lock(&g->lock);
+    g->img_min_in = img_min_in;
+    g->img_max_in = img_max_in;
+    g->img_min_out = img_min_out;
+    g->img_max_out = img_max_out;
+    g->hash = hash;
+    dt_pthread_mutex_unlock(&g->lock);
+  }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
