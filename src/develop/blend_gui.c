@@ -17,12 +17,13 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/blend.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
+#include "common/iop_priorities.h"
 #include "common/opencl.h"
 #include "control/control.h"
-#include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -193,7 +194,8 @@ static void _blendif_scale(dt_iop_colorspace_type_t cst, const float *in, float 
       out[4] = CLAMP_RANGE(temp[2], 0.0f, 1.0f);
       out[5] = out[6] = out[7] = -1;
       break;
-    case iop_cs_rgb:
+    case iop_cs_linear_rgb:
+    case iop_cs_gamma_rgb:
       _RGB_2_HSL(in, temp);
       out[0] = CLAMP_RANGE(0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2], 0.0f, 1.0f);
       out[1] = CLAMP_RANGE(in[0], 0.0f, 1.0f);
@@ -224,7 +226,8 @@ static void _blendif_cook(dt_iop_colorspace_type_t cst, const float *in, float *
       out[4] = temp[2] * 360.0f;
       out[5] = out[6] = out[7] = -1;
       break;
-    case iop_cs_rgb:
+    case iop_cs_linear_rgb:
+    case iop_cs_gamma_rgb:
       _RGB_2_HSL(in, temp);
       out[0] = (0.3f * in[0] + 0.59f * in[1] + 0.11f * in[2]) * 255.0f;
       out[1] = in[0] * 255.0f;
@@ -312,7 +315,7 @@ static void _blendop_masks_mode_callback(GtkWidget *combo, dt_iop_gui_blend_data
      *
      * TODO: revisit if/once there semi-raw iops (e.g temperature) with blending
      */
-    if(dt_iop_module_colorspace(data->module) == iop_cs_RAW)
+    if(dt_develop_get_blend_colorspace(data->module, NULL) == iop_cs_RAW)
     {
       data->module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
       dtgtk_button_set_active(DTGTK_BUTTON(data->showmask), 0);
@@ -608,17 +611,16 @@ static void _blendop_blendif_invert(GtkButton *button, dt_iop_module_t *module)
 {
   if(darktable.gui->reset) return;
 
-  dt_iop_gui_blend_data_t *data = module->blend_data;
-
   unsigned int toggle_mask = 0;
 
-  switch(data->csp)
+  switch(dt_develop_get_blend_colorspace(module, NULL))
   {
     case iop_cs_Lab:
       toggle_mask = DEVELOP_BLENDIF_Lab_MASK << 16;
       break;
 
-    case iop_cs_rgb:
+    case iop_cs_linear_rgb:
+    case iop_cs_gamma_rgb:
       toggle_mask = DEVELOP_BLENDIF_RGB_MASK << 16;
       break;
 
@@ -851,10 +853,11 @@ static gboolean _blendop_blendif_draw(GtkWidget *widget, cairo_t *cr, dt_iop_mod
   darktable.gui->reset = 1;
   if((module->request_color_pick == DT_REQUEST_COLORPICK_BLEND) && (raw_min[0] != INFINITY))
   {
-    _blendif_scale(data->csp, raw_mean, picker_mean);
-    _blendif_scale(data->csp, raw_min, picker_min);
-    _blendif_scale(data->csp, raw_max, picker_max);
-    _blendif_cook(data->csp, raw_mean, cooked);
+    const int cst = dt_develop_get_blend_colorspace(module, NULL);
+    _blendif_scale(cst, raw_mean, picker_mean);
+    _blendif_scale(cst, raw_min, picker_min);
+    _blendif_scale(cst, raw_max, picker_max);
+    _blendif_cook(cst, raw_mean, cooked);
 
     if(data->channels[data->tab][0] >= 8) // min and max make no sense for HSL and LCh
       picker_min[data->tab] = picker_max[data->tab] = picker_mean[data->tab];
@@ -1117,7 +1120,7 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
     char **labels = NULL;
     char **tooltips = NULL;
 
-    switch(bd->csp)
+    switch(dt_develop_get_blend_colorspace(module, NULL))
     {
       case iop_cs_Lab:
         maxchannels = 5;
@@ -1164,7 +1167,8 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
         bd->colorstops[4] = _gradient_hue;
         bd->numberstops[4] = sizeof(_gradient_hue) / sizeof(dt_iop_gui_blendif_colorstop_t);
         break;
-      case iop_cs_rgb:
+      case iop_cs_linear_rgb:
+      case iop_cs_gamma_rgb:
         maxchannels = 7;
         labels = rgb_labels;
         tooltips = rgb_tooltips;
@@ -1633,7 +1637,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
      *
      * TODO: revisit if/once there semi-raw iops (e.g temperature) with blending
      */
-    if(dt_iop_module_colorspace(module) == iop_cs_RAW)
+    if(dt_develop_get_blend_colorspace(module, NULL) == iop_cs_RAW)
     {
       module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
       dtgtk_button_set_active(DTGTK_BUTTON(bd->showmask), 0);
@@ -1736,8 +1740,8 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
 
     bd->iopw = iopw;
     bd->module = module;
-    bd->csp = dt_iop_module_colorspace(module);
-    bd->blendif_support = (bd->csp == iop_cs_Lab || bd->csp == iop_cs_rgb);
+    bd->cst = dt_develop_get_blend_colorspace(module, NULL);
+    bd->blendif_support = (bd->cst == iop_cs_Lab || bd->cst == iop_cs_linear_rgb || bd->cst == iop_cs_gamma_rgb);
     bd->masks_support = !(module->flags() & IOP_FLAGS_NO_MASKS);
 
     bd->masks_modes = NULL;
@@ -1847,7 +1851,7 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
     gtk_widget_set_tooltip_text(bd->blend_modes_combo, _("choose blending mode"));
 
     /** populate combobox depending on the color space this module acts in */
-    switch(bd->csp)
+    switch(dt_develop_get_blend_colorspace(module, NULL))
     {
       case iop_cs_Lab:
         _add_blendmode_combo(&(bd->blend_modes), bd->blend_modes_combo, bd->blend_modes_all,
@@ -1902,7 +1906,8 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
                              DEVELOP_BLEND_COLORADJUST);
         break;
 
-      case iop_cs_rgb:
+      case iop_cs_linear_rgb:
+      case iop_cs_gamma_rgb:
         _add_blendmode_combo(&(bd->blend_modes), bd->blend_modes_combo, bd->blend_modes_all,
                              DEVELOP_BLEND_NORMAL2);
         _add_blendmode_combo(&(bd->blend_modes), bd->blend_modes_combo, bd->blend_modes_all,

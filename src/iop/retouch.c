@@ -899,8 +899,11 @@ static int rt_masks_point_calc_delta(dt_iop_module_t *self, dt_dev_pixelpipe_iop
   float points[4];
   rt_masks_point_denormalize(piece, roi, target, 1, points);
   rt_masks_point_denormalize(piece, roi, source, 1, points + 2);
-
-  int res = dt_dev_distort_transform_plus(self->dev, piece->pipe, 0, self->priority, points, 2);
+  /*
+    int res = dt_dev_distort_transform_plus(self->dev, piece->pipe, 0, self->priority, points, 2);
+  */
+  int res = dt_dev_distort_transform_plus(self->dev, piece->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL,
+                                          points, 2);
   if(!res) return res;
 
   *dx = points[0] - points[2];
@@ -3465,6 +3468,7 @@ static inline __m128 dt_RGB_to_XYZ_sse2(__m128 rgb)
 #endif
 
 /** uses D50 white point. */
+/*
 static inline void dt_XYZ_to_RGB(const float *const XYZ, float *rgb)
 {
   const float xyz_to_srgb_matrix[3][3] = { { 3.1338561, -1.6168667, -0.4906146 },
@@ -3488,7 +3492,7 @@ static inline void dt_RGB_to_XYZ(const float *const rgb, float *XYZ)
   for(int r = 0; r < 3; r++)
     for(int c = 0; c < 3; c++) XYZ[r] += srgb_to_xyz[r][c] * rgb[c];
 }
-
+*/
 static void image_rgb2lab(float *img_src, const int width, const int height, const int ch, const int use_sse)
 {
   const int stride = width * height * ch;

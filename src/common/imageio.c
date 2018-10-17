@@ -33,6 +33,7 @@
 #ifdef HAVE_OPENJPEG
 #include "common/imageio_j2k.h"
 #endif
+#include "common/history.h"
 #include "common/image_compression.h"
 #include "common/imageio_gm.h"
 #include "common/imageio_jpeg.h"
@@ -42,6 +43,7 @@
 #include "common/imageio_rawspeed.h"
 #include "common/imageio_rgbe.h"
 #include "common/imageio_tiff.h"
+#include "common/iop_priorities.h"
 #include "common/mipmap_cache.h"
 #include "common/styles.h"
 #include "control/conf.h"
@@ -639,6 +641,23 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
       goto error;
     }
 
+    GList *modules_used = NULL;
+
+    dt_dev_pop_history_items_no_image(&dev, dev.history_end, FALSE);
+
+    GList *st_items = g_list_first(style_items);
+    while(st_items)
+    {
+      dt_style_item_t *st_item = (dt_style_item_t *)(st_items->data);
+
+      dt_styles_apply_style_item(&dev, st_item, &modules_used, format_params->style_append);
+
+      st_items = g_list_next(st_items);
+    }
+
+    g_list_free(modules_used);
+
+#if 0
     // remove everything above history_end
     GList *history = g_list_nth(dev.history, dev.history_end);
     while(history)
@@ -675,7 +694,7 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
               style_module->instance = m->instance;
               style_module->multi_priority = s->multi_priority;
               snprintf(style_module->multi_name, sizeof(style_module->multi_name), "%s", s->name);
-              dev.iop = g_list_insert_sorted(dev.iop, style_module, sort_plugins);
+              dev.iop = g_list_insert_sorted(dev.iop, style_module, dt_sort_iop_by_order);
             }
             else
             {
@@ -712,6 +731,7 @@ int dt_imageio_export_with_flags(const uint32_t imgid, const char *filename,
         }
       }
     }
+#endif
     g_list_free_full(style_items, dt_style_item_free);
   }
 

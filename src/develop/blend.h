@@ -24,7 +24,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/gradientslider.h"
 
-#define DEVELOP_BLEND_VERSION (7)
+#define DEVELOP_BLEND_VERSION (8)
 
 typedef enum dt_develop_blend_mode_t
 {
@@ -236,6 +236,29 @@ typedef struct dt_develop_blend_params6_t
   float blendif_parameters[4 * DEVELOP_BLENDIF_SIZE];
 } dt_develop_blend_params6_t;
 
+/** blend legacy parameters version 7 (added cst) */
+typedef struct dt_develop_blend_params7_t
+{
+  /** what kind of masking to use: off, non-mask (uniformly), hand-drawn mask and/or conditional mask */
+  uint32_t mask_mode;
+  /** blending mode */
+  uint32_t blend_mode;
+  /** mixing opacity */
+  float opacity;
+  /** how masks are combined */
+  uint32_t mask_combine;
+  /** id of mask in current pipeline */
+  uint32_t mask_id;
+  /** blendif mask */
+  uint32_t blendif;
+  /** blur radius */
+  float radius;
+  /** some reserved fields for future use */
+  uint32_t reserved[4];
+  /** blendif parameters */
+  float blendif_parameters[4 * DEVELOP_BLENDIF_SIZE];
+} dt_develop_blend_params7_t;
+
 /** blend parameters current version */
 typedef struct dt_develop_blend_params_t
 {
@@ -257,6 +280,8 @@ typedef struct dt_develop_blend_params_t
   uint32_t reserved[4];
   /** blendif parameters */
   float blendif_parameters[4 * DEVELOP_BLENDIF_SIZE];
+  /** colorspace input/output */
+  int cst;
 } dt_develop_blend_params_t;
 
 
@@ -296,7 +321,7 @@ typedef struct dt_iop_gui_blend_data_t
   int blendif_inited;
   int masks_support;
   int masks_inited;
-  dt_iop_colorspace_type_t csp;
+  dt_iop_colorspace_type_t cst;
   dt_iop_module_t *module;
   GList *blend_modes;
   GList *masks_modes;
@@ -359,6 +384,13 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void);
 /** global cleanup of blendops */
 void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b);
 
+/** returns the colorspace required by the blend module- piece can be NULL */
+int dt_develop_get_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+
+/** will the blend process be executed? */
+int dt_develop_blend_process_skipped(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                                     const struct dt_iop_roi_t *roi_in, const struct dt_iop_roi_t *roi_out);
+
 /** apply blend */
 void dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                               const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
@@ -370,6 +402,8 @@ int dt_develop_blend_version(void);
 /** check if content of params is all zero, indicating a non-initialized set of blend parameters which needs
  * special care. */
 gboolean dt_develop_blend_params_is_all_zero(const void *params, size_t length);
+
+void dt_develop_get_default_blend_params(const char *op_name, dt_develop_blend_params_t *default_blend_params);
 
 /** update blendop params from older versions */
 int dt_develop_blend_legacy_params(dt_iop_module_t *module, const void *const old_params,
@@ -389,7 +423,6 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module);
 
 /** routine to translate from mode id to sequence in option list */
 int dt_iop_gui_blending_mode_seq(dt_iop_gui_blend_data_t *bd, int mode);
-
 
 #ifdef HAVE_OPENCL
 /** apply blend for opencl modules*/

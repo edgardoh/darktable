@@ -1,0 +1,11 @@
+#rawspeed rawprepare
+rawprepare invert
+invert temperature
+temperature highlights
+highlights cacorrect
+cacorrect hotpixels
+hotpixels rawdenoise
+rawdenoise demosaic
+demosaic colorin
+colorin colorout
+colorout gamma

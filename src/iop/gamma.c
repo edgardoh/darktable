@@ -50,9 +50,19 @@ int groups()
 
 int flags()
 {
-  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE;
+  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_FENCE;
+}
+/*
+int get_colorspace_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece)
+{
+  return iop_cs_rgb;
 }
 
+int get_colorspace_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece)
+{
+  return iop_cs_rgb;
+}
+*/
 static inline float Hue_2_RGB(float v1, float v2, float vH)
 {
   if(vH < 0.0f) vH += 1.0f;

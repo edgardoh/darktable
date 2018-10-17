@@ -37,6 +37,8 @@ typedef struct dt_iop_buffer_dsc_t
   unsigned int channels;
   /** what is the datatype? */
   dt_iop_buffer_type_t datatype;
+  /** what is the colorspace? */
+  int cst;
   /** Bayer demosaic pattern */
   uint32_t filters;
   /** filter for Fuji X-Trans images, only used if filters == 9u */

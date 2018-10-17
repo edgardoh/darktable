@@ -643,6 +643,13 @@ static void _lib_history_button_clicked_callback(GtkWidget *widget, gpointer use
   /* revert to given history item. */
   int num = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "history-number"));
   dt_dev_pop_history_items(darktable.develop, num);
+
+  // set the module list order
+  dt_dev_reorder_gui_module_list(darktable.develop);
+
+  // we update show params for multi-instances for each other instances
+  // dt_dev_modules_update_multishow(darktable.develop);
+
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 }
 

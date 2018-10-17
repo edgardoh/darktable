@@ -1,0 +1,1738 @@
+/*
+    This file is part of darktable,
+    copyright (c) 2018 edgardo hoszowski.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+// clang-format off
+#include "common/darktable.h"
+#include "common/debug.h"
+#include "common/file_location.h"
+#include "common/iop_priorities.h"
+#include "common/colorspaces_inline_conversions.h"
+// clang-format on
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+GList *dt_get_iop_priorities_v0()
+{
+  GList *priorities = NULL;
+
+  const dt_iop_priority_entry_v0_t prior_entry[]
+      = { /*{ 0, 0.f, "rawspeed", 1 },*/
+          { 0, 0.f, "rawprepare", 1 },     { 0, 0.f, "invert", 0 },
+          { 0, 0.f, "temperature", 1 },    { 0, 0.f, "highlights", 1 },
+          { 0, 0.f, "cacorrect", 0 },      { 0, 0.f, "hotpixels", 0 },
+          { 0, 0.f, "rawdenoise", 0 },     { 0, 0.f, "demosaic", 1 },
+          { 0, 0.f, "denoiseprofile", 0 }, { 0, 0.f, "tonemap", 0 },
+          { 0, 0.f, "exposure", 0 },       { 0, 0.f, "spots", 0 },
+          { 0, 0.f, "retouch", 0 },        { 0, 0.f, "lens", 0 },
+          { 0, 0.f, "ashift", 0 },         { 0, 0.f, "liquify", 0 },
+          { 0, 0.f, "rotatepixels", 0 },   { 0, 0.f, "scalepixels", 0 },
+          { 0, 0.f, "flip", 1 },           { 0, 0.f, "graduatednd", 0 },
+          { 0, 0.f, "basecurve", 0 },      { 0, 0.f, "bilateral", 0 },
+          { 0, 0.f, "profile_gamma", 0 },  { 0, 0.f, "hazeremoval", 0 },
+          { 0, 0.f, "colorin", 1 },        { 0, 0.f, "colorreconstruct", 0 },
+          { 0, 0.f, "colorchecker", 0 },   { 0, 0.f, "defringe", 0 },
+          { 0, 0.f, "equalizer", 0 },      { 0, 0.f, "vibrance", 0 },
+          { 0, 0.f, "colorbalance", 0 },   { 0, 0.f, "clipping", 0 },
+          { 0, 0.f, "colorize", 0 },       { 0, 0.f, "colortransfer", 0 },
+          { 0, 0.f, "colormapping", 0 },   { 0, 0.f, "bloom", 0 },
+          { 0, 0.f, "nlmeans", 0 },        { 0, 0.f, "globaltonemap", 0 },
+          { 0, 0.f, "shadhi", 0 },         { 0, 0.f, "atrous", 0 },
+          { 0, 0.f, "bilat", 0 },          { 0, 0.f, "colorzones", 0 },
+          { 0, 0.f, "lowlight", 0 },       { 0, 0.f, "monochrome", 0 },
+          { 0, 0.f, "colisa", 0 },         { 0, 0.f, "zonesystem", 0 },
+          { 0, 0.f, "tonecurve", 0 },      { 0, 0.f, "levels", 0 },
+          { 0, 0.f, "relight", 0 },        { 0, 0.f, "colorcorrection", 0 },
+          { 0, 0.f, "sharpen", 0 },        { 0, 0.f, "lowpass", 0 },
+          { 0, 0.f, "highpass", 0 },       { 0, 0.f, "grain", 0 },
+          { 0, 0.f, "colorcontrast", 0 },  { 0, 0.f, "colorout", 1 },
+          { 0, 0.f, "channelmixer", 0 },   { 0, 0.f, "soften", 0 },
+          { 0, 0.f, "vignette", 0 },       { 0, 0.f, "splittoning", 0 },
+          { 0, 0.f, "velvia", 0 },         { 0, 0.f, "clahe", 0 },
+          { 0, 0.f, "finalscale", 1 },     { 0, 0.f, "overexposed", 1 },
+          { 0, 0.f, "rawoverexposed", 1 }, { 0, 0.f, "borders", 0 },
+          { 0, 0.f, "watermark", 0 },      { 0, 0.f, "dither", 0 },
+          { 0, 0.f, "gamma", 1 },          { -1, 0.f, "\0", 0 }
+        };
+
+  int i = 0;
+  while(prior_entry[i].priority >= 0)
+  {
+    dt_iop_priority_entry_v0_t *prior = calloc(1, sizeof(dt_iop_priority_entry_v0_t));
+
+    prior->priority = i + 1;
+    prior->iop_order = (float)i;
+    snprintf(prior->operation, sizeof(prior->operation), "%s", prior_entry[i].operation);
+    prior->default_enabled = prior_entry[i].default_enabled;
+
+    priorities = g_list_append(priorities, prior);
+    i++;
+  }
+
+  return priorities;
+}
+
+GList *_get_iop_priorities()
+{
+  GList *priorities = NULL;
+
+  const dt_iop_priority_entry_t prior_entry[] = { /*{ 0, 0.f, "rawspeed" },*/
+                                                  { 0, 0.f, "rawprepare" },
+                                                  { 0, 0.f, "invert" },
+                                                  { 0, 0.f, "temperature" },
+                                                  { 0, 0.f, "highlights" },
+                                                  { 0, 0.f, "cacorrect" },
+                                                  { 0, 0.f, "hotpixels" },
+                                                  { 0, 0.f, "rawdenoise" },
+                                                  { 0, 0.f, "demosaic" },
+                                                  { 0, 0.f, "dummy1" },
+                                                  { 0, 0.f, "denoiseprofile" },
+                                                  { 0, 0.f, "tonemap" },
+                                                  { 0, 0.f, "exposure" },
+                                                  { 0, 0.f, "spots" },
+                                                  { 0, 0.f, "retouch" },
+                                                  { 0, 0.f, "lens" },
+                                                  { 0, 0.f, "ashift" },
+                                                  { 0, 0.f, "liquify" },
+                                                  { 0, 0.f, "rotatepixels" },
+                                                  { 0, 0.f, "scalepixels" },
+                                                  { 0, 0.f, "flip" },
+                                                  { 0, 0.f, "graduatednd" },
+                                                  { 0, 0.f, "basecurve" },
+                                                  { 0, 0.f, "bilateral" },
+                                                  { 0, 0.f, "profile_gamma" },
+                                                  { 0, 0.f, "hazeremoval" },
+                                                  { 0, 0.f, "dummy2" },
+                                                  { 0, 0.f, "colorin" },
+                                                  { 0, 0.f, "dummy3" },
+                                                  { 0, 0.f, "colorreconstruct" },
+                                                  { 0, 0.f, "colorchecker" },
+                                                  { 0, 0.f, "defringe" },
+                                                  { 0, 0.f, "equalizer" },
+                                                  { 0, 0.f, "vibrance" },
+                                                  { 0, 0.f, "colorbalance" },
+                                                  { 0, 0.f, "clipping" },
+                                                  { 0, 0.f, "colorize" },
+                                                  { 0, 0.f, "colortransfer" },
+                                                  { 0, 0.f, "colormapping" },
+                                                  { 0, 0.f, "bloom" },
+                                                  { 0, 0.f, "nlmeans" },
+                                                  { 0, 0.f, "globaltonemap" },
+                                                  { 0, 0.f, "shadhi" },
+                                                  { 0, 0.f, "atrous" },
+                                                  { 0, 0.f, "bilat" },
+                                                  { 0, 0.f, "colorzones" },
+                                                  { 0, 0.f, "lowlight" },
+                                                  { 0, 0.f, "monochrome" },
+                                                  { 0, 0.f, "colisa" },
+                                                  { 0, 0.f, "zonesystem" },
+                                                  { 0, 0.f, "tonecurve" },
+                                                  { 0, 0.f, "levels" },
+                                                  { 0, 0.f, "relight" },
+                                                  { 0, 0.f, "colorcorrection" },
+                                                  { 0, 0.f, "sharpen" },
+                                                  { 0, 0.f, "lowpass" },
+                                                  { 0, 0.f, "highpass" },
+                                                  { 0, 0.f, "grain" },
+                                                  { 0, 0.f, "colorcontrast" },
+                                                  { 0, 0.f, "dummy4" },
+                                                  { 0, 0.f, "colorout" },
+                                                  { 0, 0.f, "dummy5" },
+                                                  { 0, 0.f, "channelmixer" },
+                                                  { 0, 0.f, "soften" },
+                                                  { 0, 0.f, "vignette" },
+                                                  { 0, 0.f, "splittoning" },
+                                                  { 0, 0.f, "velvia" },
+                                                  { 0, 0.f, "clahe" },
+                                                  { 0, 0.f, "finalscale" },
+                                                  { 0, 0.f, "overexposed" },
+                                                  { 0, 0.f, "rawoverexposed" },
+                                                  { 0, 0.f, "borders" },
+                                                  { 0, 0.f, "watermark" },
+                                                  { 0, 0.f, "dither" },
+                                                  { 0, 0.f, "dummy6" },
+                                                  { 0, 0.f, "gamma" },
+                                                  { -1, 0.f, "\0" }
+  };
+
+  int i = 0;
+  while(prior_entry[i].priority >= 0)
+  {
+    dt_iop_priority_entry_t *prior = calloc(1, sizeof(dt_iop_priority_entry_t));
+
+    prior->priority = i + 1;
+    prior->iop_order = (float)i;
+    snprintf(prior->operation, sizeof(prior->operation), "%s", prior_entry[i].operation);
+
+    priorities = g_list_append(priorities, prior);
+    i++;
+  }
+
+  return priorities;
+}
+
+int dt_iop_priorities_get_default_output_cst_v0(const char *op_name)
+{
+  int cst = 0;
+  int priority_demosaic = -1;
+  int priority_colorin = -1;
+  int priority_colorout = -1;
+  int priority_gamma = -1;
+  int priority_module = -1;
+
+  GList *prior_vo = dt_get_iop_priorities_v0();
+
+  GList *priorities = g_list_first(prior_vo);
+  while(priorities)
+  {
+    dt_iop_priority_entry_t *prior = (dt_iop_priority_entry_t *)priorities->data;
+
+    if(strcmp(prior->operation, op_name) == 0) priority_module = prior->priority;
+    if(strcmp(prior->operation, "demosaic") == 0) priority_demosaic = prior->priority;
+    if(strcmp(prior->operation, "colorin") == 0) priority_colorin = prior->priority;
+    if(strcmp(prior->operation, "colorout") == 0) priority_colorout = prior->priority;
+    if(strcmp(prior->operation, "gamma") == 0) priority_gamma = prior->priority;
+
+    priorities = g_list_next(priorities);
+  }
+
+  g_list_free_full(prior_vo, free);
+
+  if(priority_module < 0.f)
+    fprintf(stderr, "[dt_iop_priorities_get_default_output_cst_v0] can't find default output cst for module %s\n",
+            op_name);
+  else if(priority_module < priority_demosaic)
+    cst = iop_cs_RAW;
+  else if(priority_module < priority_colorin)
+    cst = iop_cs_linear_rgb;
+  else if(priority_module < priority_colorout)
+    cst = iop_cs_Lab;
+  else if(priority_module <= priority_gamma)
+    cst = iop_cs_gamma_rgb;
+  else
+    fprintf(stderr, "[dt_iop_priorities_get_default_output_cst_v0] can't find default output cst for module %s\n",
+            op_name);
+
+  return cst;
+}
+
+int dt_iop_priorities_get_default_input_colorspace(const char *op_name)
+{
+  // printf("[dt_iop_priorities_get_default_input_colorspace] begin\n");
+  int cst = 0;
+  int priority_demosaic = -1;
+  int priority_colorin = -1;
+  int priority_colorout = -1;
+  int priority_gamma = -1;
+  int priority_module = -1;
+
+  GList *priorities = g_list_first(darktable.iop_priorities);
+  while(priorities)
+  {
+    dt_iop_priority_entry_t *prior = (dt_iop_priority_entry_t *)(priorities->data);
+
+    if(strcmp(prior->operation, op_name) == 0) priority_module = prior->priority;
+    if(strcmp(prior->operation, "demosaic") == 0) priority_demosaic = prior->priority;
+    if(strcmp(prior->operation, "colorin") == 0) priority_colorin = prior->priority;
+    if(strcmp(prior->operation, "colorout") == 0) priority_colorout = prior->priority;
+    if(strcmp(prior->operation, "gamma") == 0) priority_gamma = prior->priority;
+
+    priorities = g_list_next(priorities);
+  }
+
+  if(priority_module < 0.f)
+    fprintf(stderr,
+            "[dt_iop_priorities_get_default_input_colorspace] can't find default input cst for module %s\n",
+            op_name);
+  else if(priority_module <= priority_demosaic)
+    cst = iop_cs_RAW;
+  else if(priority_module <= priority_colorin)
+    cst = iop_cs_linear_rgb;
+  else if(priority_module <= priority_colorout)
+    cst = iop_cs_Lab;
+  else if(priority_module <= priority_gamma)
+    cst = iop_cs_gamma_rgb;
+  else
+    fprintf(stderr,
+            "[dt_iop_priorities_get_default_input_colorspace] can't find default input cst for module %s\n",
+            op_name);
+
+  return cst;
+}
+
+int dt_iop_priorities_get_default_output_colorspace(const char *op_name)
+{
+  int cst = 0;
+  int priority_demosaic = -1;
+  int priority_colorin = -1;
+  int priority_colorout = -1;
+  int priority_gamma = -1;
+  int priority_module = -1;
+
+  GList *priorities = g_list_first(darktable.iop_priorities);
+  while(priorities)
+  {
+    dt_iop_priority_entry_t *prior = (dt_iop_priority_entry_t *)(priorities->data);
+
+    if(strcmp(prior->operation, op_name) == 0) priority_module = prior->priority;
+    if(strcmp(prior->operation, "demosaic") == 0) priority_demosaic = prior->priority;
+    if(strcmp(prior->operation, "colorin") == 0) priority_colorin = prior->priority;
+    if(strcmp(prior->operation, "colorout") == 0) priority_colorout = prior->priority;
+    if(strcmp(prior->operation, "gamma") == 0) priority_gamma = prior->priority;
+
+    priorities = g_list_next(priorities);
+  }
+
+  if(priority_module < 0.f)
+    fprintf(stderr,
+            "[dt_iop_priorities_get_default_output_colorspace] can't find default output cst for module %s(%i)\n",
+            op_name, priority_module);
+  else if(priority_module < priority_demosaic)
+    cst = iop_cs_RAW;
+  else if(priority_module < priority_colorin)
+    cst = iop_cs_linear_rgb;
+  else if(priority_module < priority_colorout)
+    cst = iop_cs_Lab;
+  else if(priority_module <= priority_gamma)
+    cst = iop_cs_gamma_rgb;
+  else
+    fprintf(stderr,
+            "[dt_iop_priorities_get_default_output_colorspace] can't find default output cst for module %s(%i)\n",
+            op_name, priority_module);
+
+  return cst;
+}
+
+gint dt_sort_iop_so_by_priority(gconstpointer a, gconstpointer b)
+{
+  const dt_iop_module_so_t *am = (const dt_iop_module_so_t *)a;
+  const dt_iop_module_so_t *bm = (const dt_iop_module_so_t *)b;
+  return (am->priority - bm->priority);
+}
+
+gint dt_sort_iop_by_order(gconstpointer a, gconstpointer b)
+{
+  const dt_iop_module_t *am = (const dt_iop_module_t *)a;
+  const dt_iop_module_t *bm = (const dt_iop_module_t *)b;
+  if(am->iop_order > bm->iop_order) return 1;
+  if(am->iop_order < bm->iop_order) return -1;
+  return (am->priority - bm->priority);
+}
+
+// loads config file iop_priorities and set the priority in darktable.iop list
+// iop_priorities is a list of operation names in the order that must be executed
+// by default on the pipe
+GList *_load_iop_priorities_from_file()
+{
+  GList *priorities = NULL;
+  FILE *f = 0;
+  char datadir[PATH_MAX] = { 0 };
+  dt_loc_get_user_config_dir(datadir, sizeof(datadir));
+  char iop_priorities[PATH_MAX] = { 0 };
+  snprintf(iop_priorities, sizeof(iop_priorities), "%s/iop_priorities", datadir);
+
+#define LINE_SIZE 1023
+
+  char line[LINE_SIZE + 1];
+
+  // read priorities from file and update darktable.iop list
+  f = g_fopen(iop_priorities, "rb");
+  if(f)
+  {
+    int read = 0;
+    int i = 1;
+    while(!feof(f))
+    {
+      read = fscanf(f, "%s", line);
+      if(read > 0 && line[0] != '#' && line[0] != ' ' && line[0] != '\0')
+      {
+        dt_iop_priority_entry_t *prior = calloc(1, sizeof(dt_iop_priority_entry_t));
+
+        prior->priority = i;
+        prior->iop_order = (float)i;
+        snprintf(prior->operation, sizeof(prior->operation), "%s", line);
+        // prior->default_enabled = prior->default_enabled;
+
+        priorities = g_list_append(priorities, prior);
+        i++;
+        /*        int module_found = 0;
+                GList *modules = g_list_first(darktable.iop);
+                while(modules)
+                {
+                  dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+                  if(strcmp(mod->op, line) == 0)
+                  {
+                    mod->priority = i++;
+                    module_found = 1;
+                    break;
+                  }
+                  modules = g_list_next(modules);
+                }
+                if(!module_found) fprintf(stderr, "[dt_iop_priorities_set_so_iop_priorities] module %s is not
+           installed!!!\n", line);*/
+      }
+    }
+  }
+
+  if(f) fclose(f);
+
+#undef LINE_SIZE
+
+  return priorities;
+}
+
+#if 0
+// loads config file iop_priorities and set the priority in darktable.iop list
+// iop_priorities is a list of operation names in the order that must be executed
+// by default on the pipe
+void dt_iop_priorities_set_so_iop_priorities()
+{
+  printf("[dt_iop_priorities_set_so_iop_priorities] begin\n");
+  GList *loaded_priorities = _load_iop_priorities_from_file();
+  if(loaded_priorities == NULL) loaded_priorities = _get_iop_priorities();
+
+  GList *priorities = g_list_first(loaded_priorities);
+  while(priorities)
+  {
+    dt_iop_priority_entry_t *prior = (dt_iop_priority_entry_t *)(priorities->data);
+
+    int module_found = 0;
+    GList *modules = g_list_first(darktable.iop);
+    while(modules)
+    {
+      dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+      if(strcmp(mod->op, prior->operation) == 0)
+      {
+        mod->priority = prior->priority;
+        module_found = 1;
+        break;
+      }
+      modules = g_list_next(modules);
+    }
+    if(!module_found)
+      fprintf(stderr, "[dt_iop_priorities_set_so_iop_priorities] module %s is not installed!!!\n",
+              prior->operation);
+
+    priorities = g_list_next(priorities);
+  }
+
+  /*  FILE *f = 0;
+    char datadir[PATH_MAX] = { 0 };
+    dt_loc_get_user_config_dir(datadir, sizeof(datadir));
+    char iop_priorities[PATH_MAX] = { 0 };
+    snprintf(iop_priorities, sizeof(iop_priorities), "%s/iop_priorities", datadir);
+
+  #define LINE_SIZE 1023
+
+    char line[LINE_SIZE + 1];
+
+    // read priorities from file and update darktable.iop list
+    f = g_fopen(iop_priorities, "rb");
+    if(f)
+    {
+      int read = 0;
+      int i = 1;
+      while(!feof(f))
+      {
+        read = fscanf(f, "%s", line);
+        if(read > 0 && line[0] != '#' && line[0] != ' ' && line[0] != '\0')
+        {
+          int module_found = 0;
+          GList *modules = g_list_first(darktable.iop);
+          while(modules)
+          {
+            dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+            if(strcmp(mod->op, line) == 0)
+            {
+              mod->priority = i++;
+              module_found = 1;
+              break;
+            }
+            modules = g_list_next(modules);
+          }
+          if(!module_found) fprintf(stderr, "[dt_iop_priorities_set_so_iop_priorities] module %s is not
+  installed!!!\n", line);
+        }
+      }
+    }
+
+    if(f) fclose(f);
+  */
+  // and sort the iop list
+  darktable.iop = g_list_sort(darktable.iop, dt_sort_iop_so_by_priority);
+
+  // now check if all the modules have their priority assigned
+  GList *modules = g_list_first(darktable.iop);
+  while(modules)
+  {
+    dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+    if(mod->priority < 0)
+    {
+      fprintf(stderr, "[dt_iop_priorities_set_so_iop_priorities] missing priority for module %s\n", mod->op);
+    }
+    modules = g_list_next(modules);
+  }
+
+  if(loaded_priorities) g_list_free_full(loaded_priorities, free);
+  /*
+  #undef LINE_SIZE*/
+  printf("[dt_iop_priorities_set_so_iop_priorities] end\n");
+}
+#endif
+
+int dt_iop_priorities_check_iop_priorities()
+{
+  int priority_missing = 0;
+
+  // check if all the modules have their priority assigned
+  GList *modules = g_list_first(darktable.iop);
+  while(modules)
+  {
+    dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+    if(mod->priority < 0)
+    {
+      priority_missing = 1;
+      fprintf(stderr, "[dt_iop_priorities_check_iop_priorities] missing priority for module %s\n", mod->op);
+    }
+    modules = g_list_next(modules);
+  }
+
+  return priority_missing;
+}
+
+// loads config file iop_priority_rules into a list and returns it
+// iop_priority_rules is a list of pairs of operation names
+// that indicates that the fist one must always come before in the pipe than the second one
+// so colorin colorout tell that colorin always come before colorout in the pipe
+// any module can be moved arround those two
+GList *_load_iop_priority_rules_from_file()
+{
+  GList *rules = NULL;
+  FILE *f = 0;
+  char datadir[PATH_MAX] = { 0 };
+  dt_loc_get_user_config_dir(datadir, sizeof(datadir));
+  char iop_priority_rules[PATH_MAX] = { 0 };
+  snprintf(iop_priority_rules, sizeof(iop_priority_rules), "%s/iop_priority_rules", datadir);
+
+#define LINE_SIZE 1023
+
+  char line1[LINE_SIZE + 1];
+  char line2[LINE_SIZE + 1];
+
+  // read priority rules from file and add it to a list
+  f = g_fopen(iop_priority_rules, "rb");
+  if(f)
+  {
+    int read = 0;
+    while(!feof(f))
+    {
+      read = fscanf(f, "%s %s", line1, line2);
+      if(read > 1 && line1[0] != '#' && line1[0] != ' ' && line1[0] != '\0')
+      {
+        dt_iop_priority_rule_t *rule = calloc(1, sizeof(dt_iop_priority_rule_t));
+
+        snprintf(rule->op_prev, sizeof(rule->op_prev), "%s", line1);
+        snprintf(rule->op_next, sizeof(rule->op_next), "%s", line2);
+        // printf("[_load_iop_priority_rules_from_file] %s %s\n", rule->op_prev, rule->op_next);
+        rules = g_list_append(rules, rule);
+      }
+    }
+  }
+
+  if(f) fclose(f);
+
+#undef LINE_SIZE
+
+  return rules;
+}
+
+GList *_get_iop_priority_rules()
+{
+  GList *rules = NULL;
+
+  const dt_iop_priority_rule_t rule_entry[] = { { "rawprepare", "invert" },
+                                                { "invert", "temperature" },
+                                                { "temperature", "highlights" },
+                                                { "highlights", "cacorrect" },
+                                                { "cacorrect", "hotpixels" },
+                                                { "hotpixels", "rawdenoise" },
+                                                { "rawdenoise", "demosaic" },
+                                                { "demosaic", "colorin" },
+                                                { "colorin", "colorout" },
+                                                { "colorout", "gamma" },
+                                                { "\0", "\0" } };
+
+  int i = 0;
+  while(rule_entry[i].op_prev[0])
+  {
+    dt_iop_priority_rule_t *rule = calloc(1, sizeof(dt_iop_priority_rule_t));
+
+    snprintf(rule->op_prev, sizeof(rule->op_prev), "%s", rule_entry[i].op_prev);
+    snprintf(rule->op_next, sizeof(rule->op_next), "%s", rule_entry[i].op_next);
+    // printf("[_get_iop_priority_rules] %s %s\n", rule->op_prev, rule->op_next);
+    rules = g_list_append(rules, rule);
+    i++;
+  }
+
+  return rules;
+}
+
+GList *dt_iop_priorities_load_iop_priorities()
+{
+  GList *priorities = _load_iop_priorities_from_file();
+  if(priorities == NULL) priorities = _get_iop_priorities();
+
+  /*  GList *rules_list = g_list_first(rules);
+    while(rules_list)
+    {
+      dt_iop_priority_rule_t *rule = (dt_iop_priority_rule_t *)rules_list->data;
+
+      printf("[dt_iop_priorities_load_iop_priority_rules] %s %s\n", rule->op_prev, rule->op_next);
+
+      rules_list = g_list_next(rules_list);
+    }
+  */
+  return priorities;
+}
+
+GList *dt_iop_priorities_load_iop_priority_rules()
+{
+  GList *rules = _load_iop_priority_rules_from_file();
+  if(rules == NULL) rules = _get_iop_priority_rules();
+
+  /*  GList *rules_list = g_list_first(rules);
+    while(rules_list)
+    {
+      dt_iop_priority_rule_t *rule = (dt_iop_priority_rule_t *)rules_list->data;
+
+      printf("[dt_iop_priorities_load_iop_priority_rules] %s %s\n", rule->op_prev, rule->op_next);
+
+      rules_list = g_list_next(rules_list);
+    }
+  */
+  return rules;
+}
+
+int dt_iop_priorities_get_iop_priority(const char *op_name)
+{
+  int priority = -1;
+
+  GList *priorities = g_list_first(darktable.iop_priorities);
+  while(priorities)
+  {
+    dt_iop_priority_entry_t *prior = (dt_iop_priority_entry_t *)(priorities->data);
+
+    if(strcmp(prior->operation, op_name) == 0)
+    {
+      priority = prior->priority;
+      break;
+    }
+
+    priorities = g_list_next(priorities);
+  }
+
+  if(priority < 0)
+    fprintf(stderr, "[dt_iop_priorities_get_iop_priority] can't find priority for module %s\n", op_name);
+
+  return priority;
+}
+
+int dt_iop_priorities_get_new_iop_multi_priority(dt_develop_t *dev, const char *op_name)
+{
+  int multi_priority_new = -1;
+  GList *modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+
+    if(strcmp(mod->op, op_name) == 0)
+    {
+      multi_priority_new = MAX(multi_priority_new, mod->multi_priority);
+    }
+    modules = g_list_next(modules);
+  }
+  return (multi_priority_new + 1);
+}
+
+dt_iop_module_t *dt_iop_priorities_get_last_instance(dt_develop_t *dev, dt_iop_module_t *module)
+{
+  dt_iop_module_t *last = NULL;
+  GList *modules = g_list_last(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    if(strcmp(mod->op, module->op) == 0)
+    {
+      last = mod;
+      break;
+    }
+    modules = g_list_previous(modules);
+  }
+  return last;
+}
+
+
+// if module can be placed before than module_next on the pipe
+// it returns the new iop_order
+// if it cannot be placed it returns the current module->iop_order
+float dt_get_iop_order_before_iop(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
+                                  const int log_error)
+{
+  dt_develop_t *dev = module->dev;
+  float iop_order = module->iop_order;
+  int module_found = 0;
+  int rule_found = 0;
+
+  // this can happen when migrating from an old version
+  // let's handle it here
+  if(module->iop_order == module_next->iop_order)
+  {
+    // we need to find the module before this two
+    GList *modules = g_list_first(dev->iop);
+    dt_iop_module_t *prev = NULL;
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+      if(mod == module || mod == module_next)
+      {
+        module_found = 1;
+        break;
+      }
+      prev = mod;
+      modules = g_list_next(modules);
+    }
+
+    if(module_found)
+    {
+      if(prev)
+      {
+        // calculate new iop_order
+        iop_order = module_next->iop_order - (module_next->iop_order - prev->iop_order) / 2.f;
+        /* fprintf(stderr,
+                "[dt_get_iop_order_before_iop] calculated new iop_order=%f for %s(%f) between %s(%f) and %s(%f)\n",
+                iop_order, module->op, module->iop_order, module_next->op, module_next->iop_order, prev->op,
+                prev->iop_order); */
+      }
+      else
+      {
+        // those are the first modules, this can't happen
+        if(log_error)
+          fprintf(stderr, "[dt_get_iop_order_before_iop] %s(%f) and %s(%f) are the first modules!!!\n", module->op,
+                  module->iop_order, module_next->op, module_next->iop_order);
+      }
+    }
+  }
+  // module is before on the pipe
+  // move it up
+  else if(module->iop_order < module_next->iop_order)
+  {
+    GList *modules = g_list_first(dev->iop);
+    dt_iop_module_t *prev = NULL;
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+      if(mod == module)
+      {
+        module_found = 1; // we found the module
+      }
+      else if(module_found)
+      {
+        // we reach the next module, all good
+        // calculate the new iop_order
+        if(mod == module_next)
+        {
+          // this is already the previous module!
+          if(module == prev)
+          {
+            if(log_error)
+              fprintf(stderr, "[dt_get_iop_order_before_iop] %s(%f) is already previous to %s(%f)\n", module->op,
+                      module->iop_order, prev->op, prev->iop_order);
+            break;
+          }
+
+          // calculate new iop_order
+          iop_order = module_next->iop_order - (module_next->iop_order - prev->iop_order) / 2.f;
+          /* fprintf(stderr,
+                  "[dt_get_iop_order_before_iop] calculated new iop_order=%f for %s(%f) between %s(%f) and
+             %s(%f)\n",
+                  iop_order, module->op, module->iop_order, module_next->op, module_next->iop_order, mod->op,
+                  mod->iop_order); */
+          break;
+        }
+        else if(validate_order)
+        {
+          // check if module can be moved around this one
+          if(mod->flags() & IOP_FLAGS_FENCE)
+          {
+            if(log_error)
+              fprintf(stderr, "[dt_get_iop_order_before_iop] can't move %s(%f) pass %s(%f)\n", module->op,
+                      module->iop_order, mod->op, mod->iop_order);
+            break;
+          }
+
+          // is there a rule about swapping this two?
+          // int rule_found = 0;
+          GList *rules = g_list_first(darktable.iop_priority_rules);
+          while(rules)
+          {
+            dt_iop_priority_rule_t *rule = (dt_iop_priority_rule_t *)rules->data;
+
+            if(strcmp(module->op, rule->op_prev) == 0 && strcmp(mod->op, rule->op_next) == 0)
+            {
+              if(log_error)
+                fprintf(stderr,
+                        "[dt_get_iop_order_before_iop] found rule %s %s while moving %s(%f) before %s(%f)\n",
+                        rule->op_prev, rule->op_next, module->op, module->iop_order, module_next->op,
+                        module_next->iop_order);
+              rule_found = 1;
+              break;
+            }
+
+            rules = g_list_next(rules);
+          }
+          if(rule_found) break;
+        }
+      }
+
+      prev = mod;
+      modules = g_list_next(modules);
+    }
+  }
+  else
+  // module is next on the pipe
+  // move it down
+  {
+    GList *modules = g_list_last(dev->iop);
+    int next_module_found = 0;
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+      if(mod == module)
+      {
+        module_found = 1; // we found the module
+        modules = g_list_previous(modules);
+        continue;
+      }
+      if(module_found)
+      {
+        if(next_module_found)
+        {
+          // we reach the module before module_next, all good
+          // calculate the new iop_order
+          iop_order = mod->iop_order + (module_next->iop_order - mod->iop_order) / 2.f;
+          /* fprintf(stderr,
+                  "[dt_get_iop_order_before_iop] calculated new iop_order=%f for %s(%f) between %s(%f) and
+             %s(%f)\n",
+                  iop_order, module->op, module->iop_order, mod->op, mod->iop_order, module_next->op,
+                  module_next->iop_order); */
+
+          break;
+        }
+
+        if(mod == module_next)
+        {
+          next_module_found = 1; // we found the next module
+          // modules = g_list_previous(modules);
+          // continue;
+        }
+        if(validate_order)
+        {
+          // check if module can be moved around this one
+          if(mod->flags() & IOP_FLAGS_FENCE)
+          {
+            if(log_error)
+              fprintf(stderr, "[dt_get_iop_order_before_iop] can't move %s(%f) pass %s(%f)\n", module->op,
+                      module->iop_order, mod->op, mod->iop_order);
+            break;
+          }
+
+          // is there a rule about swapping this two?
+          // int rule_found = 0;
+          GList *rules = g_list_first(darktable.iop_priority_rules);
+          while(rules)
+          {
+            dt_iop_priority_rule_t *rule = (dt_iop_priority_rule_t *)rules->data;
+
+            if(strcmp(mod->op, rule->op_prev) == 0 && strcmp(module->op, rule->op_next) == 0)
+            {
+              if(log_error)
+                fprintf(stderr,
+                        "[dt_get_iop_order_before_iop] found rule %s %s while moving %s(%f) before %s(%f)\n",
+                        rule->op_prev, rule->op_next, module->op, module->iop_order, module_next->op,
+                        module_next->iop_order);
+              rule_found = 1;
+              break;
+            }
+
+            rules = g_list_next(rules);
+          }
+          if(rule_found) break;
+        }
+      }
+
+      modules = g_list_previous(modules);
+    }
+    if(!next_module_found && !rule_found)
+      if(log_error)
+        fprintf(stderr, "[dt_get_iop_order_before_iop] can't find next module %s(%f) while moving %s(%f)\n",
+                module_next->op, module_next->iop_order, module->op, module->iop_order);
+  }
+
+  if(!module_found) fprintf(stderr, "[dt_get_iop_order_before_iop] can't find module %s\n", module->op);
+
+  return iop_order;
+}
+
+// if module can be placed after than module_prev on the pipe
+// it returns the new iop_order
+// if it cannot be placed it returns the current module->iop_order
+float dt_get_iop_order_after_iop(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
+                                 const int log_error)
+{
+  dt_develop_t *dev = module->dev;
+  float iop_order = module->iop_order;
+
+  // moving after module_prev is the same as moving before the very next one after module_prev
+  GList *modules = g_list_last(dev->iop);
+  dt_iop_module_t *module_next = NULL;
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    if(mod == module_prev) break;
+
+    module_next = mod;
+    modules = g_list_previous(modules);
+  }
+  if(module_next == NULL)
+  {
+    fprintf(stderr, "[dt_get_iop_order_after_iop] can't find module previous to %s while moving %s\n",
+            module_prev->op, module->op);
+  }
+  else
+    iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order, log_error);
+
+  return iop_order;
+}
+
+// changes the module->iop_order so it comes before in the pipe than module_next
+// sort dev->iop to reflect the changes
+// return 1 if iop_order is changed, 0 otherwise
+int dt_move_iop_before(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
+                       const int log_error)
+{
+  dt_develop_t *dev = module->dev;
+  int moved = 0;
+
+  // dt_iop_priorities_check_priorities(dev, "dt_move_iop_before begin");
+  // printf("[dt_move_iop_before] moving %s(%f) before %s(%f)\n", module->op, module->iop_order, module_next->op,
+  // module_next->iop_order);
+
+  const float iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order, log_error);
+  // printf("[dt_move_iop_before] new iop_order for %s is %f\n", module->op, iop_order);
+
+  if(module->iop_order != iop_order)
+  {
+    module->iop_order = iop_order;
+    dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
+    moved = 1;
+  }
+  else if(log_error)
+    fprintf(stderr, "[dt_move_iop_before] module %s is already before %s\n", module->op, module_next->op);
+
+  // dt_iop_priorities_check_priorities(dev, "dt_move_iop_before end");
+
+  return moved;
+}
+
+// changes the module->iop_order so it comes after in the pipe than module_prev
+// sort dev->iop to reflect the changes
+// return 1 if iop_order is changed, 0 otherwise
+int dt_move_iop_after(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
+                      const int log_error)
+{
+  // printf("[dt_move_iop_after] moving %s(%f) after %s(%f)\n", module->op, module->iop_order, module_prev->op,
+  // module_prev->iop_order);
+  dt_develop_t *dev = module->dev;
+  int moved = 0;
+
+  // dt_iop_priorities_check_priorities(dev, "dt_move_iop_after begin");
+
+  /*  // moving after module_prev is the same as moving before the very next one after module_prev
+    GList *modules = g_list_last(dev->iop);
+    dt_iop_module_t *module_next = NULL;
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+      if(mod == module_prev) break;
+
+      module_next = mod;
+      modules = g_list_previous(modules);
+    }
+    if(module_next == NULL)
+    {
+      fprintf(stderr, "[dt_move_iop_after] can't find module previous to %s while moving %s\n", module_prev->op,
+              module->op);
+      return 0;
+    }
+
+    const float iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order);*/
+  const float iop_order = dt_get_iop_order_after_iop(module, module_prev, validate_order, log_error);
+  // printf("[dt_move_iop_after] new iop_order for %s is %f\n", module->op, iop_order);
+  if(module->iop_order != iop_order)
+  {
+    module->iop_order = iop_order;
+    dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
+    moved = 1;
+  }
+  else if(log_error)
+    fprintf(stderr, "[dt_move_iop_after] module %s is already after %s\n", module->op, module_prev->op);
+
+  // dt_iop_priorities_check_priorities(dev, "dt_move_iop_after end");
+
+  return moved;
+}
+
+float get_iop_default_order(const char *op_name)
+{
+  float iop_order = -1.f;
+
+  GList *modules = g_list_first(darktable.iop);
+  while(modules)
+  {
+    dt_iop_module_so_t *mod = (dt_iop_module_so_t *)(modules->data);
+    if(strcmp(mod->op, op_name) == 0)
+    {
+      iop_order = (float)mod->priority;
+      break;
+    }
+    modules = g_list_next(modules);
+  }
+
+  return iop_order;
+}
+/*
+// updates iop_order on history for a given module
+static void _iop_priorities_update_history_iop_order(dt_develop_t *dev, dt_iop_module_t *module, const float
+iop_order)
+{
+  GList *history = g_list_first(dev->history);
+  while(history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+    if(strcmp(hist->op_name, module->op) == 0 && hist->multi_priority == module->multi_priority)
+    {
+      hist->iop_order = iop_order;
+    }
+    history = g_list_next(history);
+  }
+}
+
+// rebuilds the iop_order on the history and dev->iop
+// this assume that all entries in history for a given instance
+// have the same iop_order, so it should be called after compress history
+void dt_iop_priorities_rebuild_order(dt_develop_t *dev)
+{
+  // we want, when possible, that iop_order is the defauls order, so iqual to priority
+  // that's only possible for the first instance of a multi-instance module
+  // the rest of the multi-instances will be evenly distributed
+
+  float last_iop_order = 0.f;
+  float increment = 1.f;
+
+  // go through all modules in dev and darktable
+  // they are in iop_order order, so will read it in synch
+  GList *dev_modules = g_list_first(dev->iop);
+  GList *darktable_modules = g_list_first(darktable.iop);
+  while(dev_modules && darktable_modules)
+  {
+    dt_iop_module_t *dev_mod = (dt_iop_module_t *)dev_modules->data;
+    dt_iop_module_so_t *dt_mod = (dt_iop_module_so_t *)(darktable_modules->data);
+
+    // this is the first apperance of the module on the pipe
+    // we can use the default iop_order
+    if(dev_mod->priority == dt_mod->priority)
+    {
+      printf("[dt_iop_priorities_rebuild_order] 1st apperance dev %s(%i) dt %s(%i)\n", dev_mod->op,
+dev_mod->priority, dt_mod->op, dt_mod->priority);
+      last_iop_order = (float)dt_mod->priority;
+      if(dev_mod->iop_order != last_iop_order)
+      {
+        _iop_priorities_update_history_iop_order(dev, dev_mod, last_iop_order);
+        dev_mod->iop_order = last_iop_order;
+      }
+      // reset the increment for the next out-of-order module
+      increment = 1.f;
+
+      // move to the next module on both lists
+      dev_modules = g_list_next(dev_modules);
+      darktable_modules = g_list_next(darktable_modules);
+    }
+    else
+    {
+      if((dev_mod->flags() & (IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK)) ==
+(IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK))
+      {
+        printf("[dt_iop_priorities_rebuild_order] IOP_FLAGS_HIDDEN dev %s(%i) dt %s(%i)\n", dev_mod->op,
+dev_mod->priority, dt_mod->op, dt_mod->priority);
+        // this modules still can have the default iop_order
+        // but there's no need to update history
+        last_iop_order = (float)dt_mod->priority;
+        if(dev_mod->iop_order != last_iop_order)
+          dev_mod->iop_order = last_iop_order;
+        // reset the increment for the next out-of-order module
+        increment = 1.f;
+
+        // just need to move dev list
+        dev_modules = g_list_next(dev_modules);
+      }
+      else
+      {
+        printf("[dt_iop_priorities_rebuild_order] out-of-order dev %s(%i) dt %s(%i)\n", dev_mod->op,
+dev_mod->priority, dt_mod->op, dt_mod->priority);
+        // this module is out-of-order
+        // it means that it was moved or is a multi-instance
+        // we will increment by .5 / number of modules until we reach a module that
+        // is in order
+        increment *= .5f;
+        last_iop_order += increment;
+        if(dev_mod->iop_order != last_iop_order)
+        {
+          _iop_priorities_update_history_iop_order(dev, dev_mod, last_iop_order);
+          dev_mod->iop_order = last_iop_order;
+        }
+      }
+    }
+
+
+  }
+
+  if(dev_modules==NULL && darktable_modules!=NULL)
+  fprintf(stderr, "[dt_iop_priorities_rebuild_order] there are more modules on dev than in darktable!\n");
+  if(dev_modules!=NULL && darktable_modules==NULL)
+  fprintf(stderr, "[dt_iop_priorities_rebuild_order] there are more modules on darktable than in dev!\n");
+}
+*/
+void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
+{
+  // printf("dt_iop_priorities_read_pipe begin\n");
+  dt_iop_priorities_check_priorities(dev, "dt_iop_priorities_read_pipe begin");
+
+  sqlite3_stmt *stmt;
+
+  GList *modules = NULL;
+
+  const int log_error = 1;
+
+  int demosaic_priority = -1;
+  int colorin_priority = -1;
+  int colorout_priority = -1;
+
+  float demosaic_iop_order = -1.f;
+  float colorin_iop_order = -1.f;
+  float colorout_iop_order = -1.f;
+  float gamma_iop_order = -1.f;
+
+  dt_iop_module_t *demosaic_module = NULL;
+  dt_iop_module_t *colorin_module = NULL;
+  dt_iop_module_t *colorout_module = NULL;
+  dt_iop_module_t *gamma_module = NULL;
+
+  int demosaic_priority_old = -1;
+  int colorin_priority_old = -1;
+  int colorout_priority_old = -1;
+  int gamma_priority_old = -1;
+
+  typedef struct _former_iop_priorities_t
+  {
+    int priority;
+    int multi_priority;
+    char operation[20];
+  } _former_iop_priorities_t;
+
+  GList *old_priorities_list = NULL;
+
+  // read the last state of the pipe and update the iop_order on dev->iop
+  // this will ensure that the pipe order is correct even for modules that are not in the history
+  // main.pipe has only entries that are not in history but enabled anyway
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT operation, priority, multi_priority, iop_order "
+                              "FROM main.pipe WHERE imgid = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  // dev->history_end = 0;
+  int order_changed = 0;
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const char *opname = (const char *)sqlite3_column_text(stmt, 0);
+    const int priority = sqlite3_column_int(stmt, 1);
+    const int multi_priority = sqlite3_column_int(stmt, 2);
+    const float iop_order = sqlite3_column_double(stmt, 3);
+
+    // printf("[dt_iop_priorities_read_pipe] read module %s\n", opname);
+
+    modules = g_list_first(dev->iop);
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+      if(strcmp(mod->op, opname) == 0 && mod->multi_priority == multi_priority)
+      {
+        if(mod->iop_order != iop_order)
+        {
+          /* fprintf(stderr,
+                  "[dt_iop_priorities_read_pipe] order changed for %s %s (%i) pipe %f current %f image %i\n",
+                  mod->op, mod->multi_name, mod->multi_priority, iop_order, mod->iop_order, imgid); */
+          order_changed = 1;
+          mod->iop_order = iop_order;
+        }
+
+        // save it to the list, it will be needed later
+        _former_iop_priorities_t *former = calloc(1, sizeof(_former_iop_priorities_t));
+        former->priority = priority;
+        former->multi_priority = multi_priority;
+        snprintf(former->operation, sizeof(former->operation), "%s", opname);
+
+        old_priorities_list = g_list_append(old_priorities_list, former);
+
+        break;
+      }
+      modules = g_list_next(modules);
+    }
+
+    if(strcmp(opname, "demosaic") == 0) demosaic_priority_old = priority;
+    if(strcmp(opname, "colorin") == 0) colorin_priority_old = priority;
+    if(strcmp(opname, "colorout") == 0) colorout_priority_old = priority;
+    if(strcmp(opname, "gamma") == 0) gamma_priority_old = priority;
+  }
+  sqlite3_finalize(stmt);
+
+  if(order_changed) dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
+  if(order_changed) printf("[dt_iop_priorities_read_pipe] order has changed\n");
+  // dt_iop_priorities_check_priorities(dev, "dt_iop_priorities_read_pipe 1");
+
+  if(demosaic_priority_old < 0 || colorin_priority_old < 0 || colorout_priority_old < 0 || gamma_priority_old < 0)
+  {
+    if(demosaic_priority_old < 0)
+      fprintf(stderr, "[dt_iop_priorities_read_pipe] can't read old priority for module demosaic on image %i\n",
+              imgid);
+    if(colorin_priority_old < 0)
+      fprintf(stderr, "[dt_iop_priorities_read_pipe] can't read old priority for module colorin on image %i\n",
+              imgid);
+    if(colorout_priority_old < 0)
+      fprintf(stderr, "[dt_iop_priorities_read_pipe] can't read old priority for module colorout on image %i\n",
+              imgid);
+    if(gamma_priority_old < 0)
+      fprintf(stderr, "[dt_iop_priorities_read_pipe] can't read old priority for module gamma on image %i\n",
+              imgid);
+  }
+
+  // now we have to check if the priorities has changed
+  // we will use demosaic, colorin, colorout and gamma for this
+  int priorities_changed = 0;
+  modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+    if(strcmp(mod->op, "demosaic") == 0)
+    {
+      if(mod->priority != demosaic_priority_old) priorities_changed = 1;
+      demosaic_priority = mod->priority;
+      demosaic_iop_order = mod->iop_order;
+      demosaic_module = mod;
+    }
+    if(strcmp(mod->op, "colorin") == 0)
+    {
+      if(mod->priority != colorin_priority_old) priorities_changed = 1;
+      colorin_priority = mod->priority;
+      colorin_iop_order = mod->iop_order;
+      colorin_module = mod;
+    }
+    if(strcmp(mod->op, "colorout") == 0)
+    {
+      if(mod->priority != colorout_priority_old) priorities_changed = 1;
+      colorout_priority = mod->priority;
+      colorout_iop_order = mod->iop_order;
+      colorout_module = mod;
+    }
+    if(strcmp(mod->op, "gamma") == 0)
+    {
+      if(mod->priority != gamma_priority_old) priorities_changed = 1;
+      gamma_iop_order = mod->iop_order;
+      gamma_module = mod;
+    }
+
+    modules = g_list_next(modules);
+  }
+
+  // priorities has changed since the history was saved
+  // this means that modules that are not in the history or in the main.pipe table
+  // can be out of order
+  // since the user may have changed the order of any module we don't have a way
+  // to know the proper place for this modules
+  // but at least we can place them in the right colorspace
+  if(priorities_changed || order_changed)
+  {
+    if(priorities_changed) printf("[dt_iop_priorities_read_pipe] priorities has changed\n");
+
+    // go through all modules and check if they are in the right colorspace
+    // but only if they are not in the history or main.pipe
+    modules = g_list_first(dev->iop);
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+      int found_history = 0;
+      GList *history = g_list_first(dev->history);
+      while(history)
+      {
+        dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+
+        if(strcmp(mod->op, hist->module->op) == 0 && mod->multi_priority == hist->multi_priority)
+        {
+          found_history = 1;
+          break;
+        }
+
+        history = g_list_next(history);
+      }
+
+      int found_pipe = 0;
+      GList *pipe = g_list_first(old_priorities_list);
+      while(pipe)
+      {
+        _former_iop_priorities_t *pi = (_former_iop_priorities_t *)pipe->data;
+
+        if(strcmp(mod->op, pi->operation) == 0 && mod->multi_priority == pi->multi_priority)
+        {
+          found_pipe = 1;
+          break;
+        }
+
+        pipe = g_list_next(pipe);
+      }
+
+      int reset_list = 0;
+
+      // module is not in history or pipe, let's check if it is in the right colorspace
+      if(!found_history && !found_pipe)
+      {
+        // let's check where it should be
+        if(mod->priority < demosaic_priority) // should be raw
+        {
+          if(mod->iop_order >= demosaic_iop_order)
+          {
+            if(dt_move_iop_before(mod, demosaic_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before demosaic(%f)\n",
+                      mod->op, mod->iop_order, demosaic_iop_order);
+          }
+        }
+        else if(mod->priority < colorin_priority) // should be rgb
+        {
+          if(mod->iop_order >= colorin_iop_order)
+          {
+            if(dt_move_iop_before(mod, colorin_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before colorin(%f)\n",
+                      mod->op, mod->iop_order, colorin_iop_order);
+          }
+          else if(mod->iop_order <= demosaic_iop_order)
+          {
+            if(dt_move_iop_after(mod, demosaic_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after demosaic(%f)\n",
+                      mod->op, mod->iop_order, demosaic_iop_order);
+          }
+        }
+        else if(mod->priority < colorout_priority) // should be lab
+        {
+          if(mod->iop_order >= colorout_iop_order)
+          {
+            if(dt_move_iop_before(mod, colorout_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before colorout(%f)\n",
+                      mod->op, mod->iop_order, colorout_iop_order);
+          }
+          else if(mod->iop_order <= colorin_iop_order)
+          {
+            if(dt_move_iop_after(mod, colorin_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after colorin(%f)\n",
+                      mod->op, mod->iop_order, colorin_iop_order);
+          }
+        }
+        else // should be rgb
+        {
+          if(mod->iop_order >= gamma_iop_order)
+          {
+            if(dt_move_iop_before(mod, gamma_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before gamma(%f)\n", mod->op,
+                      mod->iop_order, gamma_iop_order);
+          }
+          else if(mod->iop_order <= colorout_iop_order)
+          {
+            if(dt_move_iop_after(mod, colorout_module, 0, log_error))
+              reset_list = 1;
+            else
+              fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after colorout(%f)\n",
+                      mod->op, mod->iop_order, colorout_iop_order);
+          }
+        }
+      } // if(!found_history && !found_pipe)
+
+      if(reset_list)
+        modules = g_list_first(dev->iop);
+      else
+        modules = g_list_next(modules);
+    } // while(modules)
+  }   // if(priorities_changed)
+
+  if(old_priorities_list) g_list_free_full(old_priorities_list, free);
+
+  dt_iop_priorities_check_priorities(dev, "dt_iop_priorities_read_pipe end");
+  // printf("dt_iop_priorities_read_pipe end\n");
+}
+
+void dt_iop_priorities_write_pipe(dt_develop_t *dev, const int imgid)
+{
+  dt_iop_priorities_check_priorities(dev, "dt_iop_priorities_write_pipe begin");
+  // printf("[dt_iop_priorities_write_pipe] begin\n");
+
+  sqlite3_stmt *stmt;
+
+  // clear the pipe first
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.pipe WHERE imgid = ?1", -1, &stmt,
+                              NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  // sqlite3_step(stmt);
+  if(sqlite3_step(stmt) != SQLITE_DONE)
+  {
+    fprintf(stderr, "[dt_iop_priorities_write_pipe] error deleting pipe for image %i\n", imgid);
+    fprintf(stderr, "%s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+  }
+  sqlite3_finalize(stmt);
+
+  // go through all modules and write the default_enabled that not exists on history
+  GList *modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    if(mod->default_enabled)
+    {
+      int history_found = 0;
+      // always save this modules, will be used to check if priorities has changed
+      if(strcmp(mod->op, "demosaic") != 0 && strcmp(mod->op, "colorin") != 0 && strcmp(mod->op, "colorout") != 0
+         && strcmp(mod->op, "gamma") != 0)
+      {
+        GList *history = g_list_first(dev->history);
+        while(history)
+        {
+          dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+          if(strcmp(hist->module->op, mod->op) == 0 && hist->module->multi_priority == mod->multi_priority)
+          {
+            history_found = 1;
+            break;
+          }
+          history = g_list_next(history);
+        }
+      }
+
+      if(!history_found)
+      {
+        DT_DEBUG_SQLITE3_PREPARE_V2(
+            dt_database_get(darktable.db),
+            "INSERT INTO main.pipe (imgid, operation, priority, multi_priority, iop_order) "
+            "VALUES (?1, ?2, ?3, ?4, ?5)",
+            -1, &stmt, NULL);
+        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+        DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, mod->op, -1, SQLITE_TRANSIENT);
+        DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, mod->priority);
+        DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, mod->multi_priority);
+        DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 5, mod->iop_order);
+        // sqlite3_step(stmt);
+        if(sqlite3_step(stmt) != SQLITE_DONE)
+        {
+          fprintf(stderr, "[dt_iop_priorities_write_pipe] error inserting operation %s on pipe for image %i\n",
+                  mod->op, imgid);
+          fprintf(stderr, "%s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+        }
+        sqlite3_finalize(stmt);
+      }
+    }
+    modules = g_list_next(modules);
+  }
+  // printf("[dt_iop_priorities_write_pipe] end\n");
+  dt_iop_priorities_check_priorities(dev, "dt_iop_priorities_write_pipe end");
+}
+
+int dt_iop_priorities_check_priorities(dt_develop_t *dev, const char *msg)
+{
+  int priorities_ok = 1;
+
+  GList *modules = g_list_last(dev->iop);
+  if(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+    if(strcmp(mod->op, "gamma") != 0)
+    {
+      priorities_ok = 0;
+      fprintf(stderr, "[dt_iop_priorities_check_priorities] gamma is not the last iop, last is %s %s (%s)\n",
+              mod->op, mod->multi_name, msg);
+    }
+  }
+  else
+  {
+    // fprintf(stderr, "[dt_iop_priorities_check_priorities] dev->iop is empty (%s)\n", msg);
+  }
+
+  return priorities_ok;
+}
+
+void dt_iop_transform_image_colorspace(struct dt_iop_module_t *self, float *image, const int width,
+                                       const int height, const int cst_from, const int cst_to, int *converted_cst)
+{
+  if(cst_from == cst_to)
+  {
+    *converted_cst = cst_to;
+    return;
+  }
+
+  int transformed = 0;
+  const int ch = 4;
+  const int im_size = width * height * ch;
+
+  if(cst_from == iop_cs_Lab)
+  {
+    if(cst_to == iop_cs_linear_rgb)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        float XYZ[3];
+        dt_Lab_to_XYZ(image + i, XYZ);
+        dt_XYZ_to_RGB(XYZ, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from lab to linear rgb\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+    else if(cst_to == iop_cs_gamma_rgb)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        float XYZ[3];
+        dt_Lab_to_XYZ(image + i, XYZ);
+        dt_XYZ_to_sRGB(XYZ, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from lab to gamma rgb\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+  }
+  else if(cst_from == iop_cs_linear_rgb)
+  {
+    if(cst_to == iop_cs_Lab)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        float XYZ[3];
+        dt_RGB_to_XYZ(image + i, XYZ);
+        dt_XYZ_to_Lab(XYZ, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from linear rgb to lab\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+    else if(cst_to == iop_cs_gamma_rgb)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        dt_RGB_to_sRGB(image + i, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from linear rgb to gamma rgb\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+  }
+  else if(cst_from == iop_cs_gamma_rgb)
+  {
+    if(cst_to == iop_cs_Lab)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        float XYZ[3];
+        dt_sRGB_to_XYZ(image + i, XYZ);
+        dt_XYZ_to_Lab(XYZ, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from gamma rgb to lab\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+    else if(cst_to == iop_cs_linear_rgb)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(image) schedule(static)
+#endif
+      for(int i = 0; i < im_size; i += ch)
+      {
+        dt_sRGB_to_RGB(image + i, image + i);
+      }
+      printf("[dt_iop_transform_image_colorspace] transforming %s %s from gamma rgb to linear rgb\n", self->op,
+             self->multi_name);
+      transformed = 1;
+    }
+  }
+
+  if(!transformed)
+  {
+    fprintf(stderr,
+            "[dt_iop_transform_image_colorspace] %s %s invalid colorspace transformation cst_from=%i, cst_to=%i\n",
+            self->op, self->multi_name, cst_from, cst_to);
+
+    *converted_cst = cst_from;
+  }
+  else
+    *converted_cst = cst_to;
+}
+
+int dt_iop_transform_image_colorspace_cl(struct dt_iop_module_t *self, const int devid, cl_mem dev_img,
+                                         const int width, const int height, const int cst_from, const int cst_to,
+                                         int *converted_cst)
+{
+  //  printf("[dt_iop_transform_image_colorspace_cl] transforming %s %s from %i to %i\n", self->op,
+  //  self->multi_name,
+  //         cst_from, cst_to);
+  cl_int err = CL_SUCCESS;
+  if(cst_from == cst_to)
+  {
+    *converted_cst = cst_to;
+    return (err == CL_SUCCESS) ? TRUE : FALSE;
+  }
+
+  const int ch = 4;
+  float *src_buffer = NULL;
+
+  const cl_mem in_colort = dt_opencl_alloc_device_buffer(devid, width * height * ch * sizeof(float));
+  if(in_colort == NULL)
+  {
+    fprintf(stderr, "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation\n");
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto cleanup;
+  }
+
+  src_buffer = dt_alloc_align(64, width * height * ch * sizeof(float));
+  if(src_buffer == NULL)
+  {
+    fprintf(stderr, "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation 1\n");
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto cleanup;
+  }
+
+  {
+    size_t origin[] = { 0, 0, 0 };
+    size_t region[] = { width, height, 1 };
+    err = dt_opencl_enqueue_copy_image_to_buffer(devid, dev_img, in_colort, origin, region, 0);
+    if(err != CL_SUCCESS)
+    {
+      fprintf(stderr,
+              "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation 2\n");
+      goto cleanup;
+    }
+  }
+
+  err = dt_opencl_read_buffer_from_device(devid, (void *)src_buffer, in_colort, 0,
+                                          (size_t)width * height * ch * sizeof(float), CL_TRUE);
+  if(err != CL_SUCCESS)
+  {
+    fprintf(stderr, "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation 3\n");
+    goto cleanup;
+  }
+
+  // just call the CPU version for now
+  dt_iop_transform_image_colorspace(self, src_buffer, width, height, cst_from, cst_to, converted_cst);
+
+  err = dt_opencl_write_buffer_to_device(devid, src_buffer, in_colort, 0, width * height * ch * sizeof(float),
+                                         TRUE);
+  if(err != CL_SUCCESS)
+  {
+    fprintf(stderr, "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation 4\n");
+    goto cleanup;
+  }
+
+  {
+    size_t origin[] = { 0, 0, 0 };
+    size_t region[] = { width, height, 1 };
+    err = dt_opencl_enqueue_copy_buffer_to_image(devid, in_colort, dev_img, 0, origin, region);
+    if(err != CL_SUCCESS)
+    {
+      fprintf(stderr,
+              "[dt_iop_transform_image_colorspace_cl] error allocating memory for color transformation 5\n");
+      goto cleanup;
+    }
+  }
+
+cleanup:
+  if(src_buffer) dt_free_align(src_buffer);
+  if(in_colort) dt_opencl_release_mem_object(in_colort);
+
+  return (err == CL_SUCCESS) ? TRUE : FALSE;
+}
+
+dt_iop_module_t *dt_iop_priorities_get_iop_by_op(dt_develop_t *dev, const char *op_name)
+{
+  dt_iop_module_t *mod_ret = NULL;
+  GList *modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+
+    if(strcmp(mod->op, op_name) == 0)
+    {
+      mod_ret = mod;
+      break;
+    }
+    modules = g_list_next(modules);
+  }
+  return mod_ret;
+}

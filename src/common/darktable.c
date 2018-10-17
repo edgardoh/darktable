@@ -45,6 +45,7 @@
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/imageio_module.h"
+#include "common/iop_priorities.h"
 #include "common/l10n.h"
 #include "common/mipmap_cache.h"
 #include "common/noiseprofiles.h"
@@ -924,8 +925,13 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   darktable.imageio = (dt_imageio_t *)calloc(1, sizeof(dt_imageio_t));
   dt_imageio_init(darktable.imageio);
 
+  // load priorities and priority rules
+  darktable.iop_priorities = dt_iop_priorities_load_iop_priorities();
+  darktable.iop_priority_rules = dt_iop_priorities_load_iop_priority_rules();
   // load the darkroom mode plugins once:
   dt_iop_load_modules_so();
+  // check if all modules have a priority assigned
+  if(dt_iop_priorities_check_iop_priorities()) return 1;
 
   if(init_gui)
   {
@@ -1087,6 +1093,10 @@ void dt_cleanup()
   dt_points_cleanup(darktable.points);
   free(darktable.points);
   dt_iop_unload_modules_so();
+  g_list_free_full(darktable.iop_priorities, free);
+  darktable.iop_priorities = NULL;
+  g_list_free_full(darktable.iop_priority_rules, free);
+  darktable.iop_priority_rules = NULL;
   dt_opencl_cleanup(darktable.opencl);
   free(darktable.opencl);
 #ifdef HAVE_GPHOTO2

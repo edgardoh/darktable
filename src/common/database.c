@@ -20,6 +20,7 @@
 #include "common/database.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/iop_priorities.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "gui/legacy_presets.h"
@@ -37,7 +38,7 @@
 
 // whenever _create_*_schema() gets changed you HAVE to bump this version and add an update path to
 // _upgrade_*_schema_step()!
-#define CURRENT_DATABASE_VERSION_LIBRARY 17
+#define CURRENT_DATABASE_VERSION_LIBRARY 18
 #define CURRENT_DATABASE_VERSION_DATA 1
 
 typedef struct dt_database_t
@@ -1003,6 +1004,101 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
     sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
     new_version = 17;
   }
+  else if(version == 17)
+  {
+    ////////////////////////////// custom iop order
+    TRY_EXEC("ALTER TABLE main.history ADD COLUMN iop_order REAL",
+             "[init] can't add `iop_order' column to history table in database\n");
+
+    TRY_EXEC("ALTER TABLE data.style_items ADD COLUMN iop_order REAL",
+             "[init] can't add `iop_order' column to style_items table in database\n");
+
+    // create a temp table with the previous priorities
+
+    TRY_EXEC("CREATE TEMPORARY TABLE iop_order_tmp (priority INTEGER, iop_order REAL, operation VARCHAR(256), "
+             "default_enabled INTEGER)",
+             "[init] can't create temporary table for updating `main.history'\n");
+    TRY_EXEC("CREATE TABLE main.pipe (imgid INTEGER, operation VARCHAR(256), priority INTEGER, multi_priority "
+             "INTEGER, iop_order REAL)",
+             "[init] can't create main.pipe table\n");
+    TRY_EXEC("CREATE INDEX main.pipe_imgid_index ON pipe (imgid)",
+             "[init] can't create main.pipe_imgid_index index\n");
+
+    // fill temp table with all operations up to this release
+    // it will be used to create the pipe and update the iop_order on history
+    GList *prior_vo = dt_get_iop_priorities_v0();
+
+    GList *priorities = g_list_first(prior_vo);
+    while(priorities)
+    {
+      dt_iop_priority_entry_v0_t *prior = (dt_iop_priority_entry_v0_t *)priorities->data;
+
+      sqlite3_prepare_v2(
+          db->handle,
+          "INSERT INTO iop_order_tmp (priority, iop_order, operation, default_enabled) VALUES (?1, ?2, ?3, ?4)",
+          -1, &stmt, NULL);
+      sqlite3_bind_int(stmt, 1, prior->priority);
+      sqlite3_bind_double(stmt, 2, prior->iop_order);
+      sqlite3_bind_text(stmt, 3, prior->operation, -1, SQLITE_TRANSIENT);
+      sqlite3_bind_int(stmt, 4, prior->default_enabled);
+      // sqlite3_step(stmt);
+      TRY_STEP(stmt, SQLITE_DONE, "[init] can't insert default value in iop_order_tmp\n");
+      sqlite3_finalize(stmt);
+
+      priorities = g_list_next(priorities);
+    }
+    g_list_free_full(prior_vo, free);
+
+    // create the pipe
+    // this inserts, for each image in history, all operations that are default_enabled
+    // that means, are always executed on the pipe
+    TRY_EXEC("INSERT INTO main.pipe (imgid, operation, priority, multi_priority, iop_order) "
+             "SELECT distinct imgid, iop_order_tmp.operation, iop_order_tmp.priority, 0, iop_order_tmp.iop_order "
+             "FROM main.history "
+             "CROSS JOIN iop_order_tmp "
+             "WHERE iop_order_tmp.default_enabled = 1",
+             "[init] can't create default values for main.pipe table\n");
+
+    // create the order of the pipe
+    // iop_order is by default the module priority
+    // if there's multi-instances we add the multi_priority
+    // multi_priority is in reverse order in this version,
+    // so we assume that is always less than 1000 and reverse it
+    TRY_EXEC("UPDATE main.history SET iop_order = 1. - ((multi_priority+1) / 1000.) + "
+             "IFNULL((SELECT iop_order FROM iop_order_tmp WHERE iop_order_tmp.operation = "
+             "main.history.operation), -999999)",
+             "[init] can't update iop_order in history table\n");
+
+    // check if there's any entry in history that was not updated
+    int iop_order_null = 0;
+    sqlite3_stmt *sel_stmt;
+    TRY_PREPARE(sel_stmt, "SELECT DISTINCT operation FROM main.history WHERE iop_order < 0",
+                "[init] can't prepare selecting history iop_order\n");
+    while(sqlite3_step(sel_stmt) == SQLITE_ROW)
+    {
+      const char *op_name = (const char *)sqlite3_column_text(sel_stmt, 0);
+      printf("operation %s with no iop_order while upgrading database\n", op_name);
+      iop_order_null++;
+    }
+    sqlite3_finalize(sel_stmt);
+
+    if(iop_order_null > 0)
+    {
+      TRY_EXEC("UPDATE main.history SET iop_order = 0 WHERE iop_order IS NULL",
+               "[init] can't update iop_order in history table\n");
+    }
+
+    // update styles with the iop_order
+    TRY_EXEC("UPDATE data.style_items SET iop_order = 1. - ((multi_priority+1) / 1000.) + "
+             "IFNULL((SELECT iop_order FROM iop_order_tmp WHERE iop_order_tmp.operation = "
+             "data.style_items.operation), -999999)",
+             "[init] can't update iop_order in style_items table\n");
+
+    TRY_EXEC("DROP TABLE iop_order_tmp", "[init] can't drop table `iop_order_tmp' from database\n");
+
+    sqlite3_exec(db->handle, "COMMIT", NULL, NULL, NULL);
+    new_version = 18;
+  }
   // maybe in the future, see commented out code elsewhere
   //   else if(version == XXX)
   //   {
@@ -1130,13 +1226,16 @@ static void _create_library_schema(dt_database_t *db)
   ////////////////////////////// selected_images
   sqlite3_exec(db->handle, "CREATE TABLE main.selected_images (imgid INTEGER PRIMARY KEY)", NULL, NULL, NULL);
   ////////////////////////////// history
-  sqlite3_exec(
-      db->handle,
-      "CREATE TABLE main.history (imgid INTEGER, num INTEGER, module INTEGER, "
-      "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
-      NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE TABLE main.history (imgid INTEGER, num INTEGER, module INTEGER, "
+                           "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
+                           "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name "
+                           "VARCHAR(256), iop_order REAL)",
+               NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE INDEX main.history_imgid_index ON history (imgid)", NULL, NULL, NULL);
+  ////////////////////////////// pipe
+  sqlite3_exec(db->handle, "CREATE TABLE main.pipe (imgid INTEGER, operation VARCHAR(256), iop_order REAL)", NULL,
+               NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE INDEX main.pipe_imgid_index ON pipe (imgid)", NULL, NULL, NULL);
   ////////////////////////////// mask
   sqlite3_exec(db->handle,
                "CREATE TABLE main.mask (imgid INTEGER, formid INTEGER, form INTEGER, name VARCHAR(256), "
@@ -1178,12 +1277,11 @@ static void _create_data_schema(dt_database_t *db)
   sqlite3_exec(db->handle, "CREATE TABLE data.styles (id INTEGER, name VARCHAR, description VARCHAR)",
                         NULL, NULL, NULL);
   ////////////////////////////// style_items
-  sqlite3_exec(
-      db->handle,
-      "CREATE TABLE data.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
-      "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
-      NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE TABLE data.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
+                           "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
+                           "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name "
+                           "VARCHAR(256), iop_order REAL)",
+               NULL, NULL, NULL);
   ////////////////////////////// presets
   sqlite3_exec(db->handle, "CREATE TABLE data.presets (name VARCHAR, description VARCHAR, operation "
                            "VARCHAR, op_version INTEGER, op_params BLOB, "
@@ -1214,18 +1312,16 @@ static void _create_memory_schema(dt_database_t *db)
                            "(tmpid INTEGER PRIMARY KEY, id INTEGER UNIQUE ON CONFLICT IGNORE, count INTEGER)",
                NULL, NULL, NULL);
   sqlite3_exec(db->handle, "CREATE TABLE memory.similar_tags (tagid INTEGER)", NULL, NULL, NULL);
-  sqlite3_exec(
-      db->handle,
-      "CREATE TABLE memory.history (imgid INTEGER, num INTEGER, module INTEGER, "
-      "operation VARCHAR(256) UNIQUE ON CONFLICT REPLACE, op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
-      NULL, NULL, NULL);
-  sqlite3_exec(
-      db->handle,
-      "CREATE TABLE memory.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
-      "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
-      "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name VARCHAR(256))",
-      NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE TABLE memory.history (imgid INTEGER, num INTEGER, module INTEGER, "
+                           "operation VARCHAR(256) UNIQUE ON CONFLICT REPLACE, op_params BLOB, enabled INTEGER, "
+                           "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name "
+                           "VARCHAR(256), iop_order REAL)",
+               NULL, NULL, NULL);
+  sqlite3_exec(db->handle, "CREATE TABLE memory.style_items (styleid INTEGER, num INTEGER, module INTEGER, "
+                           "operation VARCHAR(256), op_params BLOB, enabled INTEGER, "
+                           "blendop_params BLOB, blendop_version INTEGER, multi_priority INTEGER, multi_name "
+                           "VARCHAR(256), iop_order REAL)",
+               NULL, NULL, NULL);
 }
 
 static void _sanitize_db(dt_database_t *db)

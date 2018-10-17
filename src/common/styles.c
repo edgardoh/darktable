@@ -24,6 +24,7 @@
 #include "common/history.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
+#include "common/iop_priorities.h"
 #include "common/tags.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -54,6 +55,7 @@ typedef struct
   int multi_priority;
   GString *multi_name;
   int enabled;
+  float iop_order;
 } StylePluginData;
 
 typedef struct
@@ -78,10 +80,12 @@ void dt_style_item_free(gpointer data)
   dt_style_item_t *item = (dt_style_item_t *)data;
   g_free(item->name);
   g_free(item->operation);
+  g_free(item->multi_name);
   free(item->params);
   free(item->blendop_params);
   item->name = NULL;
   item->operation = NULL;
+  item->multi_name = NULL;
   item->params = NULL;
   item->blendop_params = NULL;
   free(item);
@@ -225,12 +229,13 @@ static void _dt_style_update_from_image(int id, int imgid, GList *filter, GList 
       }
       // update only, so we want to insert the new style item
       else if(GPOINTER_TO_INT(upd->data) != -1)
-        snprintf(query, sizeof(query), "INSERT INTO data.style_items "
-                                       "(styleid,num,module,operation,op_params,enabled,blendop_params,"
-                                       "blendop_version,multi_priority,multi_name) SELECT %d,(SELECT num+1 "
-                                       "FROM data.style_items WHERE styleid=%d ORDER BY num DESC LIMIT 1), "
-                                       "module,operation,op_params,enabled,blendop_params,blendop_version,"
-                                       "multi_priority,multi_name FROM main.history WHERE imgid=%d AND num=%d",
+        snprintf(query, sizeof(query),
+                 "INSERT INTO data.style_items "
+                 "(styleid,num,module,operation,op_params,enabled,blendop_params,"
+                 "blendop_version,multi_priority,multi_name,iop_order) SELECT %d,(SELECT num+1 "
+                 "FROM data.style_items WHERE styleid=%d ORDER BY num DESC LIMIT 1), "
+                 "module,operation,op_params,enabled,blendop_params,blendop_version,"
+                 "multi_priority,multi_name,iop_order FROM main.history WHERE imgid=%d AND num=%d",
                  id, id, imgid, GPOINTER_TO_INT(upd->data));
 
       if(*query) DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
@@ -351,11 +356,12 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
       g_strlcat(include, ")", sizeof(include));
       char query[4096] = { 0 };
 
-      snprintf(query, sizeof(query), "INSERT INTO data.style_items "
-                                     "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                                     "version,multi_priority,multi_name) SELECT ?1, "
-                                     "num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-                                     "multi_priority,multi_name FROM data.style_items WHERE styleid=?2 AND %s",
+      snprintf(query, sizeof(query),
+               "INSERT INTO data.style_items "
+               "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
+               "version,multi_priority,multi_name,iop_order) SELECT ?1, "
+               "num,module,operation,op_params,enabled,blendop_params,blendop_version,"
+               "multi_priority,multi_name,iop_order FROM data.style_items WHERE styleid=?2 AND %s",
                include);
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     }
@@ -363,9 +369,9 @@ void dt_styles_create_from_style(const char *name, const char *newname, const ch
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                   "INSERT INTO data.style_items "
                                   "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                                  "version,multi_priority,multi_name) SELECT ?1, "
+                                  "version,multi_priority,multi_name,iop_order) SELECT ?1, "
                                   "num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-                                  "multi_priority,multi_name FROM data.style_items WHERE styleid=?2",
+                                  "multi_priority,multi_name,iop_order FROM data.style_items WHERE styleid=?2",
                                   -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, oldid);
@@ -426,9 +432,9 @@ gboolean dt_styles_create_from_image(const char *name, const char *description, 
       char query[4096] = { 0 };
       snprintf(query, sizeof(query), "INSERT INTO data.style_items "
                                      "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                                     "version,multi_priority,multi_name) SELECT ?1, "
+                                     "version,multi_priority,multi_name,iop_order) SELECT ?1, "
                                      "num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-                                     "multi_priority,multi_name FROM main.history WHERE imgid=?2 AND %s",
+                                     "multi_priority,multi_name,iop_order FROM main.history WHERE imgid=?2 AND %s",
                include);
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     }
@@ -436,9 +442,9 @@ gboolean dt_styles_create_from_image(const char *name, const char *description, 
       DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                                   "INSERT INTO data.style_items "
                                   "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                                  "version,multi_priority,multi_name) SELECT ?1, "
+                                  "version,multi_priority,multi_name,iop_order) SELECT ?1, "
                                   "num,module,operation,op_params,enabled,blendop_params,blendop_version,"
-                                  "multi_priority,multi_name FROM main.history WHERE imgid=?2",
+                                  "multi_priority,multi_name,iop_order FROM main.history WHERE imgid=?2",
                                   -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
@@ -512,6 +518,7 @@ void dt_styles_create_from_selection()
   if(!selected) dt_control_log(_("no image selected!"));
 }
 
+#if 0
 void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgid)
 {
   int id = 0;
@@ -610,6 +617,267 @@ void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgi
     dt_control_queue_redraw_center();
   }
 }
+#endif
+
+void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item, GList **modules_used,
+                                const int append)
+{
+  // get any instance of the same operation so we can copy it
+  dt_iop_module_t *module_src = dt_iop_priorities_get_iop_by_op(dev, style_item->operation);
+  if(module_src)
+  {
+    // printf("[_apply_style_on_export]  found module %s %s in dev\n", module_src->op,
+    // module_src->multi_name);
+
+    dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+    if(dt_iop_load_module(module, module_src->so, dev))
+    {
+      module = NULL;
+      fprintf(stderr, "[_apply_style_on_export] can't load module %s %s\n", style_item->operation,
+              style_item->multi_name);
+    }
+    else
+    {
+      // printf("[_apply_style_on_export]  loaded module %s %s in dev\n", module->op,
+      // module->multi_name);
+
+      module->instance = module_src->instance;
+      module->enabled = style_item->enabled;
+      snprintf(module->multi_name, sizeof(module->multi_name), "%s", style_item->multi_name);
+      // multi_priority and iop_order will be decided by dt_history_merge_module_into_history()
+      // so we don't need to deal here with thouse
+      // module->multi_priority = multi_priority;
+      // module->iop_order = iop_order;
+
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
+      hist->module = module;
+      hist->enabled = module->enabled;
+      hist->params = calloc(1, hist->module->params_size);
+      hist->blend_params = calloc(1, sizeof(dt_develop_blend_params_t));
+      snprintf(hist->op_name, sizeof(hist->op_name), "%s", hist->module->op);
+      snprintf(hist->multi_name, sizeof(hist->multi_name), "%s", style_item->multi_name);
+      hist->iop_order = module->iop_order;
+      hist->multi_priority = module->multi_priority;
+
+      if(!dt_dev_migrate_module_params(hist, style_item->operation, style_item->module_version, style_item->params,
+                                       style_item->params_size, style_item->blendop_params,
+                                       style_item->blendop_version, style_item->blendop_params_size))
+      {
+        fprintf(stderr, "[_apply_style_on_export] can't migrate params for module %s %s\n", module->op,
+                module->multi_name);
+      }
+      else
+      {
+        if(!dt_history_merge_module_into_history(dev, module, modules_used, append))
+        {
+          fprintf(stderr, "[_apply_style_on_export] can't apply module %s %s into image\n", module->op,
+                  module->multi_name);
+        }
+      }
+
+      if(hist) dt_dev_free_history_item(hist);
+    }
+    if(module)
+    {
+      dt_iop_cleanup_module(module);
+      free(module);
+    }
+  }
+}
+
+void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgid)
+{
+  int id = 0;
+  sqlite3_stmt *stmt;
+  int32_t newimgid;
+
+  if((id = dt_styles_get_id_by_name(name)) != 0)
+  {
+    /* check if we should make a duplicate before applying style */
+    if(duplicate)
+    {
+      newimgid = dt_image_duplicate(imgid);
+      if(newimgid != -1) dt_history_copy_and_paste_on_image(imgid, newimgid, FALSE, NULL);
+    }
+    else
+      newimgid = imgid;
+
+    // now deal with the history
+    GList *modules_used = NULL;
+
+    // dt_develop_t _dev_src = { 0 };
+    dt_develop_t _dev_dest = { 0 };
+
+    // dt_develop_t *dev_src = &_dev_src;
+    dt_develop_t *dev_dest = &_dev_dest;
+
+    // dt_dev_init(dev_src, FALSE);
+    dt_dev_init(dev_dest, FALSE);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  1\n");
+
+    // dev_src->iop = dt_iop_load_modules_no_image(dev_src, FALSE);
+    // dt_masks_read_forms(dev_src);
+    dev_dest->iop = dt_iop_load_modules_no_image(dev_dest, FALSE);
+    // dt_masks_read_forms(_dev_dest);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  2\n");
+
+    // dt_dev_read_history_no_image(dev_src, imgid);
+    // printf("[dt_history_copy_and_paste_on_image_merge]  3\n");
+    dt_dev_read_history_no_image(dev_dest, newimgid);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  4\n");
+
+    // dt_dev_pop_history_items_no_image(dev_src, dev_src->history_end, FALSE);
+    dt_dev_pop_history_items_no_image(dev_dest, dev_dest->history_end, FALSE);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  5\n");
+
+    // go through all entries in style
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT num, module, operation, op_params, enabled, "
+                                "blendop_params, blendop_version, multi_priority, multi_name, iop_order "
+                                "FROM data.style_items WHERE styleid=?1 "
+                                "ORDER BY num",
+                                -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
+    while(sqlite3_step(stmt) == SQLITE_ROW)
+    {
+      dt_style_item_t style_item = { 0 };
+
+      style_item.num = sqlite3_column_int(stmt, 0);
+      style_item.selimg_num = 0;
+      style_item.enabled = sqlite3_column_int(stmt, 4);
+      style_item.multi_priority = sqlite3_column_int(stmt, 7);
+      style_item.name = NULL;
+      style_item.operation = (char *)sqlite3_column_text(stmt, 2);
+      style_item.multi_name = (char *)sqlite3_column_text(stmt, 8);
+      style_item.module_version = sqlite3_column_int(stmt, 1);
+      style_item.blendop_version = sqlite3_column_int(stmt, 6);
+      style_item.params = (void *)sqlite3_column_blob(stmt, 3);
+      style_item.blendop_params = (void *)sqlite3_column_blob(stmt, 5);
+      style_item.params_size = sqlite3_column_bytes(stmt, 3);
+      style_item.blendop_params_size = sqlite3_column_bytes(stmt, 5);
+
+      dt_styles_apply_style_item(dev_dest, &style_item, &modules_used, FALSE);
+
+#if 0
+      // const int num = sqlite3_column_int(stmt, 0);
+      const int modversion = sqlite3_column_int(stmt, 1);
+      const char *op_name = (const char *)sqlite3_column_text(stmt, 2);
+      const void *op_params = sqlite3_column_blob(stmt, 3);
+      const int32_t params_size = sqlite3_column_bytes(stmt, 3);
+      const int enabled = sqlite3_column_int(stmt, 4);
+      const void *blendop_params = sqlite3_column_blob(stmt, 5);
+      const int32_t blendop_params_size = sqlite3_column_bytes(stmt, 5);
+      const int blendop_version = sqlite3_column_int(stmt, 6);
+      // const int multi_priority = sqlite3_column_int(stmt, 7);
+      const char *multi_name = (const char *)sqlite3_column_text(stmt, 8);
+      // const float iop_order = sqlite3_column_double(stmt, 9);
+
+      // printf("[dt_styles_apply_to_image]  read module %s %s from style\n", op_name, multi_name);
+
+      // get any instance of the same operation so we can copy it
+      dt_iop_module_t *module_src = dt_iop_priorities_get_iop_by_op(dev_dest, op_name);
+      if(module_src)
+      {
+        // printf("[dt_styles_apply_to_image]  found module %s %s in dev_dest\n", module_src->op,
+        // module_src->multi_name);
+
+        dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+        if(dt_iop_load_module(module, module_src->so, dev_dest))
+        {
+          module = NULL;
+          fprintf(stderr, "[dt_styles_apply_to_image] can't load module %s %s\n", op_name, multi_name);
+        }
+        else
+        {
+          // printf("[dt_styles_apply_to_image]  loaded module %s %s in dev_dest\n", module->op,
+          // module->multi_name);
+
+          module->instance = module_src->instance;
+          module->enabled = enabled;
+          snprintf(module->multi_name, sizeof(module->multi_name), "%s", multi_name);
+          // multi_priority and iop_order will be decided by dt_history_merge_module_into_history()
+          // so we don't need to deal here with thouse
+          // module->multi_priority = multi_priority;
+          // module->iop_order = iop_order;
+
+          dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
+          hist->module = module;
+          hist->enabled = module->enabled;
+          hist->params = calloc(1, hist->module->params_size);
+          hist->blend_params = calloc(1, sizeof(dt_develop_blend_params_t));
+          snprintf(hist->op_name, sizeof(hist->op_name), "%s", hist->module->op);
+          snprintf(hist->multi_name, sizeof(hist->multi_name), "%s", multi_name);
+          hist->iop_order = module->iop_order;
+          hist->multi_priority = module->multi_priority;
+
+          if(!dt_dev_migrate_module_params(hist, op_name, modversion, op_params, params_size, blendop_params,
+                                           blendop_version, blendop_params_size))
+          {
+            fprintf(stderr, "[dt_styles_apply_to_image] can't migrate params for module %s %s\n", module->op,
+                    module->multi_name);
+          }
+          else if(!dt_history_merge_module_into_history(dev_dest, module, &modules_used, FALSE))
+          {
+            fprintf(stderr, "[dt_styles_apply_to_image] can't apply module %s %s into image\n", op_name,
+                    multi_name);
+          }
+
+          if(hist) dt_dev_free_history_item(hist);
+        }
+        if(module)
+        {
+          dt_iop_cleanup_module(module);
+          free(module);
+        }
+      }
+#endif
+    }
+    sqlite3_finalize(stmt);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  5\n");
+
+    dt_dev_write_history_no_image(dev_dest, newimgid);
+
+    // printf("[dt_history_copy_and_paste_on_image_merge]  6\n");
+
+    // dt_dev_cleanup(dev_src);
+    dt_dev_cleanup(dev_dest);
+
+    g_list_free(modules_used);
+
+// printf("[dt_history_copy_and_paste_on_image_merge]  end\n");
+
+    /* add tag */
+    guint tagid = 0;
+    gchar ntag[512] = { 0 };
+    g_snprintf(ntag, sizeof(ntag), "darktable|style|%s", name);
+    if(dt_tag_new(ntag, &tagid)) dt_tag_attach(tagid, newimgid);
+    if(dt_tag_new("darktable|changed", &tagid)) dt_tag_attach(tagid, newimgid);
+
+    /* if current image in develop reload history */
+    if(dt_dev_is_current_image(darktable.develop, newimgid))
+    {
+      dt_dev_reload_history_items(darktable.develop);
+      dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
+    }
+
+    /* update xmp file */
+    dt_image_synch_xmp(newimgid);
+
+    /* remove old obsolete thumbnails */
+    dt_mipmap_cache_remove(darktable.mipmap_cache, newimgid);
+
+    /* if we have created a duplicate, reset collected images */
+    if(duplicate) dt_control_signal_raise(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED);
+
+    /* redraw center view to update visible mipmaps */
+    dt_control_queue_redraw_center();
+  }
+}
 
 void dt_styles_delete_by_name(const char *name)
 {
@@ -646,10 +914,11 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int imgid)
   if((id = dt_styles_get_id_by_name(name)) != 0)
   {
     if(params)
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "SELECT num, multi_priority, module, operation, enabled, op_params, blendop_params, "
-                                  "multi_name FROM data.style_items WHERE styleid=?1 ORDER BY num DESC",
-                                  -1, &stmt, NULL);
+      DT_DEBUG_SQLITE3_PREPARE_V2(
+          dt_database_get(darktable.db),
+          "SELECT num, multi_priority, module, operation, enabled, op_params, blendop_params, "
+          "multi_name, iop_order FROM data.style_items WHERE styleid=?1 ORDER BY num DESC",
+          -1, &stmt, NULL);
     else if(imgid != -1)
     {
       // get all items from the style
@@ -657,21 +926,26 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int imgid)
       // get all items from history, not in the style : select only the last operation, that is max(num)
       DT_DEBUG_SQLITE3_PREPARE_V2(
           dt_database_get(darktable.db),
-          "SELECT num, multi_priority, module, operation, enabled, (SELECT MAX(num) FROM main.history WHERE imgid=?2 "
-          "AND operation=data.style_items.operation GROUP BY multi_priority),multi_name FROM data.style_items WHERE "
-          "styleid=?1 UNION SELECT -1,main.history.multi_priority,main.history.module,main.history.operation,main.history.enabled, "
+          "SELECT num, multi_priority, module, operation, enabled, (SELECT MAX(num) FROM main.history WHERE "
+          "imgid=?2 "
+          "AND operation=data.style_items.operation GROUP BY multi_priority),multi_name,iop_order FROM "
+          "data.style_items WHERE "
+          "styleid=?1 UNION SELECT "
+          "-1,main.history.multi_priority,main.history.module,main.history.operation,main.history.enabled, "
           "main.history.num,multi_name FROM main.history WHERE imgid=?2 AND main.history.enabled=1 AND "
           "(main.history.operation NOT IN (SELECT operation FROM data.style_items WHERE styleid=?1) OR "
           "(main.history.op_params NOT IN (SELECT op_params FROM data.style_items WHERE styleid=?1 AND "
           "operation=main.history.operation)) OR (main.history.blendop_params NOT IN (SELECT blendop_params FROM "
           "data.style_items WHERE styleid=?1 AND operation=main.history.operation))) GROUP BY operation HAVING "
-          "MAX(num) ORDER BY num DESC", -1, &stmt, NULL);
+          "MAX(num) ORDER BY num DESC",
+          -1, &stmt, NULL);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
     }
     else
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT num, multi_priority, module, operation, "
-                                                                 "enabled, 0, multi_name FROM data.style_items WHERE "
-                                                                 "styleid=?1 ORDER BY num DESC",
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT num, multi_priority, module, operation, "
+                                  "enabled, 0, multi_name, iop_order FROM data.style_items WHERE "
+                                  "styleid=?1 ORDER BY num DESC",
                                   -1, &stmt, NULL);
 
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
@@ -710,9 +984,11 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int imgid)
         const int32_t bop_len = sqlite3_column_bytes(stmt, 6);
 
         item->params = malloc(op_len);
+        item->params_size = op_len;
         memcpy(item->params, op_blob, op_len);
 
         item->blendop_params = malloc(bop_len);
+        item->blendop_params_size = bop_len;
         memcpy(item->blendop_params, bop_blob, bop_len);
       }
       else
@@ -733,11 +1009,17 @@ GList *dt_styles_get_item_list(const char *name, gboolean params, int imgid)
 
         item->params = NULL;
         item->blendop_params = NULL;
+        item->params_size = 0;
+        item->blendop_params_size = 0;
         if(imgid != -1 && sqlite3_column_type(stmt, 5) != SQLITE_NULL)
           item->selimg_num = sqlite3_column_int(stmt, 5);
       }
       item->name = g_strdup(iname);
       item->operation = g_strdup((char *)sqlite3_column_text(stmt, 3));
+      if(params)
+        item->multi_name = g_strdup((char *)sqlite3_column_text(stmt, 7));
+      else
+        item->multi_name = g_strdup((char *)sqlite3_column_text(stmt, 6));
       result = g_list_append(result, item);
     }
     sqlite3_finalize(stmt);
@@ -847,9 +1129,10 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   xmlTextWriterEndElement(writer);
 
   xmlTextWriterStartElement(writer, BAD_CAST "style");
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT num,module,operation,op_params,enabled,"
-                                                             "blendop_params,blendop_version,multi_priority,"
-                                                             "multi_name FROM data.style_items WHERE styleid =?1",
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT num,module,operation,op_params,enabled,"
+                              "blendop_params,blendop_version,multi_priority,"
+                              "multi_name,iop_order FROM data.style_items WHERE styleid =?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dt_styles_get_id_by_name(style_name));
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -864,6 +1147,7 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
     xmlTextWriterWriteFormatElement(writer, BAD_CAST "blendop_version", "%d", sqlite3_column_int(stmt, 6));
     xmlTextWriterWriteFormatElement(writer, BAD_CAST "multi_priority", "%d", sqlite3_column_int(stmt, 7));
     xmlTextWriterWriteFormatElement(writer, BAD_CAST "multi_name", "%s", sqlite3_column_text(stmt, 8));
+    xmlTextWriterWriteFormatElement(writer, BAD_CAST "iop_order", "%f", sqlite3_column_double(stmt, 9));
     xmlTextWriterEndElement(writer);
   }
   sqlite3_finalize(stmt);
@@ -987,6 +1271,10 @@ static void dt_styles_style_text_handler(GMarkupParseContext *context, const gch
     {
       plug->enabled = atoi(text);
     }
+    else if(g_ascii_strcasecmp(elt, "iop_order") == 0)
+    {
+      plug->iop_order = atof(text);
+    }
   }
 }
 
@@ -1002,11 +1290,12 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
 {
   int id = GPOINTER_TO_INT(styleId);
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "INSERT INTO data.style_items "
-                              "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
-                              "version,multi_priority,multi_name) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "INSERT INTO data.style_items "
+      "(styleid,num,module,operation,op_params,enabled,blendop_params,blendop_"
+      "version,multi_priority,multi_name,iop_order) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+      -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, plugin->num);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, plugin->module);
@@ -1030,6 +1319,7 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
 
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, plugin->multi_priority);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, plugin->multi_name->str, plugin->multi_name->len, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, plugin->iop_order);
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);

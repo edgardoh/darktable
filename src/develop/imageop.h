@@ -73,8 +73,7 @@ typedef enum dt_iop_tags_t
 } dt_iop_tags_t;
 
 /** module tags */
-typedef enum dt_iop_flags_t
-{
+typedef enum dt_iop_flags_t {
   IOP_FLAGS_NONE = 0,
 
   /** Flag for the iop module to be enabled/included by default when creating a style */
@@ -82,16 +81,16 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_SUPPORTS_BLENDING = 1 << 1, // Does provide blending modes
   IOP_FLAGS_DEPRECATED = 1 << 2,
   IOP_FLAGS_BLEND_ONLY_LIGHTNESS
-  = 1 << 3, // Does only blend with L-channel in Lab space. Keeps a, b of original image.
+  = 1 << 3,                        // Does only blend with L-channel in Lab space. Keeps a, b of original image.
   IOP_FLAGS_ALLOW_TILING = 1 << 4, // Does allow tile-wise processing (valid for CPU and GPU processing)
   IOP_FLAGS_HIDDEN = 1 << 5,       // Hide the iop from userinterface
   IOP_FLAGS_TILING_FULL_ROI
   = 1 << 6, // Tiling code has to expect arbitrary roi's for this module (incl. flipping, mirroring etc.)
-  IOP_FLAGS_ONE_INSTANCE = 1 << 7, // The module doesn't support multiple instances
-  IOP_FLAGS_PREVIEW_NON_OPENCL
-  = 1 << 8, // Preview pixelpipe of this module must not run on GPU but always on CPU
-  IOP_FLAGS_NO_HISTORY_STACK = 1 << 9, // This iop will never show up in the history stack
-  IOP_FLAGS_NO_MASKS = 1 << 10         // The module doesn't support masks (used with SUPPORT_BLENDING)
+  IOP_FLAGS_ONE_INSTANCE = 1 << 7,       // The module doesn't support multiple instances
+  IOP_FLAGS_PREVIEW_NON_OPENCL = 1 << 8, // Preview pixelpipe of this module must not run on GPU but always on CPU
+  IOP_FLAGS_NO_HISTORY_STACK = 1 << 9,   // This iop will never show up in the history stack
+  IOP_FLAGS_NO_MASKS = 1 << 10,          // The module doesn't support masks (used with SUPPORT_BLENDING)
+  IOP_FLAGS_FENCE = 1 << 11              // No module can be moved pass this one
 } dt_iop_flags_t;
 
 /** status of a module*/
@@ -127,6 +126,8 @@ typedef struct dt_iop_module_so_t
   GModule *module;
   /** string identifying this operation. */
   dt_dev_operation_t op;
+  /** order in which plugins are stacked. */
+  int32_t priority;
   /** other stuff that may be needed by the module, not only in gui mode. inited only once, has to be
    * read-only then. */
   dt_iop_global_data_t *data;
@@ -209,6 +210,10 @@ typedef struct dt_iop_module_so_t
   // allow to select a shape inside an iop
   void (*masks_selection_changed)(struct dt_iop_module_t *self, const int form_selected_id);
 
+  /** returns the input and output colorspace for a given module. piece can be NULL */
+  int (*get_colorspace_in)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+  int (*get_colorspace_out)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+
   void (*process)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                   void *const o, const struct dt_iop_roi_t *const roi_in,
                   const struct dt_iop_roi_t *const roi_out);
@@ -254,6 +259,8 @@ typedef struct dt_iop_module_t
   int32_t instance;
   /** order in which plugins are stacked. */
   int32_t priority;
+  /** order of the module on the pipe. the pipe will be sorted by iop_order, priority. */
+  float iop_order;
   /** module sets this if the enable checkbox should be hidden. */
   int32_t hide_enable_button;
   /** set to DT_REQUEST_COLORPICK_MODULE if you want an input color picked during next eval. gui mode only. */
@@ -328,6 +335,7 @@ typedef struct dt_iop_module_t
   gboolean multi_show_close;
   gboolean multi_show_up;
   gboolean multi_show_down;
+  gboolean multi_show_new;
   GtkWidget *duplicate_button;
   GtkWidget *multimenu_button;
 
@@ -406,6 +414,9 @@ typedef struct dt_iop_module_t
   // allow to select a shape inside an iop
   void (*masks_selection_changed)(struct dt_iop_module_t *self, const int form_selected_id);
 
+  int (*get_colorspace_in)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+  int (*get_colorspace_out)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+
   /** this is the temp homebrew callback to operations.
     * x,y, and scale are just given for orientation in the framebuffer. i and o are
     * scaled to the same size width*height and contain a max of 3 floats. other color
@@ -467,9 +478,9 @@ void dt_iop_unload_modules_so();
 /** load a module for a given .so */
 int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, struct dt_develop_t *dev);
 /** returns a list of instances referencing stuff loaded in load_modules_so. */
+GList *dt_iop_load_modules_no_image(struct dt_develop_t *dev, const int has_image);
 GList *dt_iop_load_modules(struct dt_develop_t *dev);
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, struct dt_develop_t *dev);
-gint sort_plugins(gconstpointer a, gconstpointer b);
 /** calls module->cleanup and closes the dl connection. */
 void dt_iop_cleanup_module(dt_iop_module_t *module);
 /** initialize pipe. */
@@ -527,15 +538,15 @@ int dt_iop_breakpoint(struct dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 void dt_iop_nap(int32_t usec);
 
 /** colorspace enums */
-typedef enum dt_iop_colorspace_type_t
-{
-  iop_cs_RAW,
-  iop_cs_Lab,
-  iop_cs_rgb
+typedef enum dt_iop_colorspace_type_t {
+  iop_cs_RAW = 1,
+  iop_cs_Lab = 2,
+  iop_cs_linear_rgb = 3,
+  iop_cs_gamma_rgb = 4
 } dt_iop_colorspace_type_t;
 
 /** find which colorspace the module works within */
-dt_iop_colorspace_type_t dt_iop_module_colorspace(const dt_iop_module_t *module);
+// dt_iop_colorspace_type_t dt_iop_module_colorspace(const dt_iop_module_t *module);
 
 dt_iop_module_t *get_colorout_module();
 
@@ -544,6 +555,11 @@ gchar *dt_iop_get_localized_name(const gchar *op);
 
 /** Connects common accelerators to an iop module */
 void dt_iop_connect_common_accels(dt_iop_module_t *module);
+
+/** returns the previous visible module on the module list */
+dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module);
+/** returns the next visible module on the module list */
+dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module);
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

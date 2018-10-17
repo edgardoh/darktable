@@ -587,17 +587,18 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(g_list_nth_data(dev->iop, i));
 
-    // the base module is the one with the highest multi_priority
+    // the base module is the one with the lowest multi_priority
     const guint clen = g_list_length(dev->iop);
     int base_multi_priority = 0;
     for(int k = 0; k < clen; k++)
     {
       dt_iop_module_t *mod = (dt_iop_module_t *)(g_list_nth_data(dev->iop, k));
-      if(strcmp(module->op, mod->op) == 0) base_multi_priority = MAX(base_multi_priority, mod->multi_priority);
+      if(strcmp(module->op, mod->op) == 0) base_multi_priority = MIN(base_multi_priority, mod->multi_priority);
     }
 
     if(module->multi_priority == base_multi_priority) // if the module is the "base" instance, we keep it
     {
+      module->iop_order = (float)module->priority;
       module->multi_priority = 0;
       module->multi_name[0] = '\0';
       dt_iop_reload_defaults(module);
@@ -622,6 +623,15 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       free(module);
     }
   }
+
+  // we also clear the saved modules
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
+  }
+
   dt_dev_pixelpipe_create_nodes(dev->pipe, dev);
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
   dt_masks_read_forms(dev);
@@ -638,6 +648,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       {
         module->gui_init(module);
         dt_iop_reload_defaults(module);
+#if 0
         // we search the base iop corresponding
         GList *mods = g_list_first(dev->iop);
         dt_iop_module_t *base = NULL;
@@ -658,10 +669,12 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
           pos++;
         }
         if(!base) continue;
+#endif
 
         /* add module to right panel */
         GtkWidget *expander = dt_iop_gui_get_expander(module);
         dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
+#if 0
         GValue gv = { 0, { { 0 } } };
         g_value_init(&gv, G_TYPE_INT);
         gtk_container_child_get_property(
@@ -669,6 +682,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
             base->expander, "position", &gv);
         gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
                               expander, g_value_get_int(&gv) + pos_base - pos_module);
+#endif
         dt_iop_gui_set_expanded(module, FALSE, FALSE);
         dt_iop_gui_update_blending(module);
       }
@@ -679,7 +693,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
       dt_iop_connect_common_accels(module);
 
       // we update show params for multi-instances for each other instances
-      dt_dev_modules_update_multishow(module->dev);
+      // dt_dev_modules_update_multishow(module->dev);
     }
     else
     {
@@ -691,6 +705,9 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   }
 
   dt_dev_pop_history_items(dev, dev->history_end);
+
+  // set the module list order
+  dt_dev_reorder_gui_module_list(dev);
 
   if(active_plugin)
   {
@@ -1886,6 +1903,13 @@ void leave(dt_view_t *self)
     dt_iop_cleanup_module(module);
     free(module);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
+  }
+
+  while(dev->alliop)
+  {
+    dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
+    free(dev->alliop->data);
+    dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
   }
 
   dt_pthread_mutex_unlock(&dev->history_mutex);

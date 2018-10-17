@@ -23,11 +23,14 @@
 #include "common/exif.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
+#include "common/iop_priorities.h"
 #include "common/mipmap_cache.h"
 #include "common/tags.h"
 #include "common/utility.h"
 #include "control/control.h"
+#include "develop/blend.h"
 #include "develop/develop.h"
+#include "develop/masks.h"
 
 void dt_history_item_free(gpointer data)
 {
@@ -50,6 +53,7 @@ static void remove_preset_flag(const int imgid)
   dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
 }
 
+#if 0
 static void _dt_history_cleanup_multi_instance()
 {
   /* as we let the user decide which history item to copy, we can end with some gaps in multi-instance
@@ -324,12 +328,19 @@ void dt_history_rebuild_multi_priority_merge(const int dest_imgid)
   }
   sqlite3_finalize(stmt);
 }
+#endif
 
 void dt_history_delete_on_image(int32_t imgid)
 {
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
                               &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.pipe WHERE imgid = ?1", -1, &stmt,
+                              NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
@@ -393,8 +404,8 @@ int dt_history_load_and_apply_on_selection(gchar *filename)
 {
   int res = 0;
   sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images",
-                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT imgid FROM main.selected_images", -1, &stmt,
+                              NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     int imgid = sqlite3_column_int(stmt, 0);
@@ -403,7 +414,7 @@ int dt_history_load_and_apply_on_selection(gchar *filename)
   sqlite3_finalize(stmt);
   return res;
 }
-
+#if 0
 int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboolean merge, GList *ops)
 {
   sqlite3_stmt *stmt;
@@ -579,6 +590,493 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboole
   dt_mipmap_cache_remove(darktable.mipmap_cache, dest_imgid);
   dt_image_set_aspect_ratio(dest_imgid);
   return 0;
+}
+#endif
+
+static dt_dev_history_item_t *_search_history_by_module(dt_develop_t *dev, dt_iop_module_t *module)
+{
+  dt_dev_history_item_t *hist_mod = NULL;
+  GList *history = g_list_first(dev->history);
+  while(history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+
+    if(hist->module == module)
+    {
+      hist_mod = hist;
+      break;
+    }
+    history = g_list_next(history);
+  }
+  return hist_mod;
+}
+
+static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, dt_iop_module_t *module)
+{
+  dt_dev_history_item_t *hist_mod = NULL;
+  GList *history = g_list_first(dev->history);
+  while(history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+
+    if(strcmp(hist->module->op, module->op) == 0)
+    {
+      hist_mod = hist;
+      break;
+    }
+    history = g_list_next(history);
+  }
+  return hist_mod;
+}
+
+static dt_iop_module_t *_search_list_iop_by_module(GList *modules_list, dt_iop_module_t *module)
+{
+  dt_iop_module_t *mod_ret = NULL;
+  GList *modules = g_list_first(modules_list);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+
+    if(mod == module)
+    {
+      mod_ret = mod;
+      break;
+    }
+    modules = g_list_next(modules);
+  }
+  return mod_ret;
+}
+
+int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_module_t *mod_src, GList **_modules_used,
+                                         const int append)
+{
+  int module_added = 1;
+  GList *modules_used = *_modules_used;
+  dt_iop_module_t *module = NULL;
+  dt_iop_module_t *mod_replace = NULL;
+  int multi_priority = mod_src->multi_priority;
+  float iop_order = mod_src->iop_order;
+
+  // one-instance modules always replace the existing one
+  if(mod_src->flags() & IOP_FLAGS_ONE_INSTANCE)
+  {
+    mod_replace = dt_iop_priorities_get_iop_by_op(dev_dest, mod_src->op);
+    if(mod_replace)
+    {
+      multi_priority = mod_replace->multi_priority;
+      iop_order = mod_replace->iop_order;
+    }
+    else
+    {
+      fprintf(stderr, "[dt_history_copy_and_paste_on_image_merge] can't find single instance module %s\n",
+              mod_src->op);
+      module_added = 0;
+    }
+  }
+
+  if(module_added && !append)
+  {
+    // we haven't found a module to replace
+    if(mod_replace == NULL)
+    {
+      // check if there's a module with the same (operation, multi_name) on dev->iop
+      GList *modules_dest = g_list_first(dev_dest->iop);
+      while(modules_dest)
+      {
+        dt_iop_module_t *mod_dest = (dt_iop_module_t *)(modules_dest->data);
+
+        if(strcmp(mod_src->op, mod_dest->op) == 0 && strcmp(mod_src->multi_name, mod_dest->multi_name) == 0)
+        {
+          // but only if it hasn't been used already
+          if(_search_list_iop_by_module(modules_used, mod_dest) == NULL)
+          {
+            printf("[dt_history_copy_and_paste_on_image_merge] found module %s %s to replace %s %s\n",
+                   mod_dest->op, mod_dest->multi_name, mod_src->op, mod_src->multi_name);
+
+            // we will replace this module
+            modules_used = g_list_append(modules_used, mod_dest);
+            mod_replace = mod_dest;
+            multi_priority = mod_replace->multi_priority;
+            iop_order = mod_replace->iop_order;
+            break;
+          }
+        }
+        modules_dest = g_list_next(modules_dest);
+      }
+    }
+  }
+
+  if(module_added)
+  {
+    // we haven't found a module to replace, so we will create a new instance
+    if(mod_replace == NULL)
+    {
+      // but if there's an un-used instance on dev->iop we will use that
+      if(_search_history_by_op(dev_dest, mod_src) == NULL)
+      {
+        printf("[dt_history_copy_and_paste_on_image_merge] replacing un-used module %s %s, instance=%i, "
+               "priority=%i\n",
+               mod_src->op, mod_src->multi_name, mod_src->instance, mod_src->priority);
+
+        // there should be only one instance of this iop (since is un-used)
+        mod_replace = dt_iop_priorities_get_iop_by_op(dev_dest, mod_src->op);
+        if(mod_replace)
+        {
+          multi_priority = mod_replace->multi_priority;
+          iop_order = mod_replace->iop_order;
+        }
+        else
+        {
+          fprintf(stderr, "[dt_history_copy_and_paste_on_image_merge] can't find base instance module %s\n",
+                  mod_src->op);
+          module_added = 0;
+        }
+      }
+    }
+  }
+
+  if(module_added)
+  {
+    // change multi_priority so it replaces it, but keep the same order
+    if(!mod_replace)
+    {
+      printf("[dt_history_copy_and_paste_on_image_merge] adding new module %s %s, instance=%i, priority=%i\n",
+             mod_src->op, mod_src->multi_name, mod_src->instance, mod_src->priority);
+
+      // otherwise generate a new multi_priority
+      multi_priority = dt_iop_priorities_get_new_iop_multi_priority(dev_dest, mod_src->op);
+    }
+    else
+    {
+      printf("[dt_history_copy_and_paste_on_image_merge] replacing module %s %s, instance=%i, priority=%i\n",
+             mod_src->op, mod_src->multi_name, mod_src->instance, mod_src->priority);
+    }
+  }
+
+  if(module_added)
+  {
+    // if we are creating a new instance, create a new module
+    if(!mod_replace)
+    {
+      module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+      if(dt_iop_load_module(module, mod_src->so, dev_dest))
+      {
+        module_added = 0;
+      }
+      else
+      {
+        module->instance = mod_src->instance;
+        module->multi_priority = multi_priority;
+        module->iop_order = iop_order;
+
+        dev_dest->iop = g_list_insert_sorted(dev_dest->iop, module, dt_sort_iop_by_order);
+      }
+    }
+    else
+    {
+      module = mod_replace;
+    }
+
+    module->enabled = mod_src->enabled;
+    snprintf(module->multi_name, sizeof(module->multi_name), "%s", mod_src->multi_name);
+
+    memcpy(module->params, mod_src->params, module->params_size);
+    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+    {
+      memcpy(module->blend_params, mod_src->blend_params, sizeof(dt_develop_blend_params_t));
+      module->blend_params->mask_id = mod_src->blend_params->mask_id;
+    }
+  }
+
+  if(module_added)
+  {
+    if(!mod_replace)
+    {
+      // we place it after the last instance of the same operation
+      dt_iop_module_t *last_instance = dt_iop_priorities_get_last_instance(dev_dest, mod_src);
+      if(last_instance)
+      {
+        if(!dt_move_iop_after(module, last_instance, 1, 1))
+        {
+          fprintf(stderr, "[dt_history_copy_and_paste_on_image_merge] can't module module %s %s after %s %s\n",
+                  module->op, module->multi_name, last_instance->op, last_instance->multi_name);
+        }
+      }
+    }
+  }
+
+  // and we add it to history
+  if(module_added)
+  {
+    printf("[dt_history_copy_and_paste_on_image_merge] adding module %s %s to history, instance=%i, priority=%i\n",
+           module->op, module->multi_name, module->instance, module->priority);
+    dt_dev_add_history_item_no_image(dev_dest, module, FALSE, FALSE);
+    dt_dev_pop_history_items_no_image(dev_dest, dev_dest->history_end, FALSE);
+  }
+
+  *_modules_used = modules_used;
+
+  return module_added;
+}
+
+static int dt_history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops)
+{
+  sqlite3_stmt *stmt;
+
+  // copy the masks first
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "INSERT INTO main.mask (imgid, formid, form, name, version, points, points_count, source) SELECT "
+      "?1, formid, form, name, version, points, points_count, source FROM main.mask WHERE imgid = ?2",
+      -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  begin\n");
+
+  // now deal with the history
+  GList *modules_used = NULL;
+
+  dt_develop_t _dev_src = { 0 };
+  dt_develop_t _dev_dest = { 0 };
+
+  dt_develop_t *dev_src = &_dev_src;
+  dt_develop_t *dev_dest = &_dev_dest;
+
+  dt_dev_init(dev_src, FALSE);
+  dt_dev_init(dev_dest, FALSE);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  1\n");
+
+  dev_src->iop = dt_iop_load_modules_no_image(dev_src, FALSE);
+  // dt_masks_read_forms(dev_src);
+  dev_dest->iop = dt_iop_load_modules_no_image(dev_dest, FALSE);
+  // dt_masks_read_forms(_dev_dest);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  2\n");
+
+  dt_dev_read_history_no_image(dev_src, imgid);
+  // printf("[dt_history_copy_and_paste_on_image_merge]  3\n");
+  dt_dev_read_history_no_image(dev_dest, dest_imgid);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  4\n");
+
+  dt_dev_pop_history_items_no_image(dev_src, dev_src->history_end, FALSE);
+  dt_dev_pop_history_items_no_image(dev_dest, dev_dest->history_end, FALSE);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  5\n");
+
+  // we have to copy the entire history
+  if(ops)
+  {
+    GList *l = g_list_last(ops);
+    while(l)
+    {
+      unsigned int num = GPOINTER_TO_UINT(l->data);
+
+      dt_dev_history_item_t *hist = g_list_nth_data(dev_src->history, num);
+
+      if(hist)
+      {
+        // only if module is in history in source image
+        // if(_search_history_by_module(dev_src, mod_src) != NULL)
+        dt_history_merge_module_into_history(/*dev_src,*/ dev_dest, hist->module, &modules_used, FALSE);
+      }
+
+      l = g_list_previous(l);
+    }
+  }
+  else
+  {
+    // go through all modules
+    GList *modules_src = g_list_first(dev_src->iop);
+    while(modules_src)
+    {
+      dt_iop_module_t *mod_src = (dt_iop_module_t *)(modules_src->data);
+
+      // only if module is in history in source image
+      if(_search_history_by_module(dev_src, mod_src) != NULL)
+        dt_history_merge_module_into_history(/*dev_src,*/ dev_dest, mod_src, &modules_used, FALSE);
+
+      modules_src = g_list_next(modules_src);
+    }
+  }
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  5\n");
+
+  dt_dev_write_history_no_image(dev_dest, dest_imgid);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  6\n");
+
+  dt_dev_cleanup(dev_src);
+  dt_dev_cleanup(dev_dest);
+
+  g_list_free(modules_used);
+
+  // printf("[dt_history_copy_and_paste_on_image_merge]  end\n");
+
+  return 0;
+}
+
+static int dt_history_copy_and_paste_on_image_overite(int32_t imgid, int32_t dest_imgid, GList *ops)
+{
+  sqlite3_stmt *stmt;
+
+  /* if merge onto history stack, lets find history offest in destination image */
+  int32_t offs = 0;
+
+  /* replace history stack */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.pipe WHERE imgid = ?1", -1, &stmt,
+                              NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  /* delete all items from the temp styles_items, this table is used only to get a ROWNUM of the results */
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.style_items", NULL, NULL, NULL);
+
+  /* copy history items from styles onto temp table */
+
+  //  prepare SQL request
+  // we select all items in history or only the ones selected by the user
+  char req[2048];
+  g_strlcpy(req, "INSERT INTO memory.style_items (num, module, operation, op_params, enabled, blendop_params, "
+                 "blendop_version, multi_name, multi_priority, iop_order) SELECT num, module, operation, "
+                 "op_params, enabled, blendop_params, blendop_version, multi_name, multi_priority, iop_order FROM "
+                 "main.history WHERE imgid = ?1",
+            sizeof(req));
+
+  //  Add ops selection if any format: ... and num in (val1, val2)
+  if(ops)
+  {
+    GList *l = ops;
+    int first = 1;
+    g_strlcat(req, " AND num IN (", sizeof(req));
+
+    while(l)
+    {
+      unsigned int value = GPOINTER_TO_UINT(l->data);
+      char v[30];
+
+      if(!first) g_strlcat(req, ",", sizeof(req));
+      snprintf(v, sizeof(v), "%u", value);
+      g_strlcat(req, v, sizeof(req));
+      first = 0;
+      l = g_list_next(l);
+    }
+    g_strlcat(req, ")", sizeof(req));
+  }
+
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), req, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  /* copy the history items into the history of the dest image */
+  /* note: rowid starts at 1 while num has to start at 0! */
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "INSERT INTO main.history "
+                              "(imgid,num,module,operation,op_params,enabled,blendop_params,blendop_"
+                              "version,multi_priority,multi_name, iop_order) SELECT "
+                              "?1,?2+rowid-1,module,operation,op_params,enabled,blendop_params,blendop_"
+                              "version,multi_priority,multi_name, iop_order FROM memory.style_items",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, offs);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // we also need to copy the pipe
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "INSERT INTO main.pipe "
+                              "(imgid, operation, priority, multi_priority, iop_order) SELECT "
+                              "?1, operation, priority, multi_priority, iop_order FROM main.pipe pipe1 "
+                              "WHERE pipe1.imgid = ?2",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // we have to copy masks too
+  // what to do with existing masks ?
+
+  // there's very little chance that we will have same shapes id.
+  // but we may want to handle this case anyway
+  // and it's not trivial at all !
+
+  // let's remove all existing shapes
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.mask WHERE imgid = ?1", -1, &stmt,
+                              NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // let's copy now
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "INSERT INTO main.mask (imgid, formid, form, name, version, points, points_count, source) SELECT "
+      "?1, formid, form, name, version, points, points_count, source FROM main.mask WHERE imgid = ?2",
+      -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // always make the whole stack active
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "UPDATE main.images SET history_end = (SELECT MAX(num) + 1 FROM main.history "
+                              "WHERE imgid = ?1) WHERE id = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  return 0;
+}
+
+int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, gboolean merge, GList *ops)
+{
+  if(imgid == dest_imgid) return 1;
+
+  if(imgid == -1)
+  {
+    dt_control_log(_("you need to copy history from an image before you paste it onto another"));
+    return 1;
+  }
+
+  // be sure the current history is written before pasting some other history data
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
+
+  int ret_val = 0;
+  if(merge)
+    ret_val = dt_history_copy_and_paste_on_image_merge(imgid, dest_imgid, ops);
+  else
+    ret_val = dt_history_copy_and_paste_on_image_overite(imgid, dest_imgid, ops);
+
+  /* if current image in develop reload history */
+  if(dt_dev_is_current_image(darktable.develop, dest_imgid))
+  {
+    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
+  }
+
+  /* update xmp file */
+  dt_image_synch_xmp(dest_imgid);
+
+  dt_mipmap_cache_remove(darktable.mipmap_cache, dest_imgid);
+  dt_image_set_aspect_ratio(dest_imgid);
+
+  return ret_val;
 }
 
 GList *dt_history_get_items(int32_t imgid, gboolean enabled)

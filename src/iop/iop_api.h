@@ -149,6 +149,10 @@ int legacy_params(struct dt_iop_module_t *self, const void *const old_params, co
 // allow to select a shape inside an iop
 void masks_selection_changed(struct dt_iop_module_t *self, const int form_selected_id);
 
+/** returns the input and output colorspace for a given module. piece can be NULL */
+int get_colorspace_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+int get_colorspace_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece);
+
 /** this is the temp homebrew callback to operations.
   * x,y, and scale are just given for orientation in the framebuffer. i and o are
   * scaled to the same size width*height and contain a max of 3 floats. other color

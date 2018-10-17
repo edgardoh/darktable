@@ -168,9 +168,19 @@ int groups()
 
 int flags()
 {
-  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE;
+  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_FENCE;
+}
+/*
+int get_colorspace_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece)
+{
+  return iop_cs_RAW;
 }
 
+int get_colorspace_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece)
+{
+  return iop_cs_linear_rgb;
+}
+*/
 void init_key_accels(dt_iop_module_so_t *self)
 {
   dt_accel_register_slider_iop(self, FALSE, NC_("accel", "edge threshold"));

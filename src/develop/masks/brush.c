@@ -536,10 +536,10 @@ static inline int _brush_cyclic_cursor(int n, int nb)
 
 /** get all points of the brush and the border */
 /** this takes care of gaps and iop distortions */
-static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, int prio_max,
-                                    dt_dev_pixelpipe_t *pipe, float **points, int *points_count,
-                                    float **border, int *border_count, float **payload, int *payload_count,
-                                    int source)
+static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, const float iop_order,
+                                    const int transf_direction, dt_dev_pixelpipe_t *pipe, float **points,
+                                    int *points_count, float **border, int *border_count, float **payload,
+                                    int *payload_count, int source)
 {
   double start2 = dt_get_wtime();
 
@@ -847,9 +847,9 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, in
   start2 = dt_get_wtime();
 
   // and we transform them with all distorted modules
-  if(dt_dev_distort_transform_plus(dev, pipe, 0, prio_max, *points, *points_count))
+  if(dt_dev_distort_transform_plus(dev, pipe, iop_order, transf_direction, *points, *points_count))
   {
-    if(!border || dt_dev_distort_transform_plus(dev, pipe, 0, prio_max, *border, *border_count))
+    if(!border || dt_dev_distort_transform_plus(dev, pipe, iop_order, transf_direction, *border, *border_count))
     {
       if(darktable.unmuted & DT_DEBUG_PERF)
         dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points transform took %0.04f sec\n", form->name,
@@ -969,8 +969,8 @@ static void dt_brush_get_distance(float x, int y, float as, dt_masks_form_gui_t 
 static int dt_brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float **points,
                                       int *points_count, float **border, int *border_count, int source)
 {
-  return _brush_get_points_border(dev, form, 999999, dev->preview_pipe, points, points_count, border,
-                                  border_count, NULL, NULL, source);
+  return _brush_get_points_border(dev, form, 0.f, DT_DEV_TRANSFORM_DIR_ALL, dev->preview_pipe, points,
+                                  points_count, border, border_count, NULL, NULL, source);
 }
 
 /** find relative position within a brush segment that is closest to the point given by coordinates x and y;
@@ -2590,8 +2590,8 @@ static int dt_brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(!_brush_get_points_border(module->dev, form, module->priority, piece->pipe, &points, &points_count,
-                               &border, &border_count, NULL, NULL, 1))
+  if(!_brush_get_points_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+                               &points, &points_count, &border, &border_count, NULL, NULL, 1))
   {
     free(points);
     free(border);
@@ -2640,8 +2640,8 @@ static int dt_brush_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(!_brush_get_points_border(module->dev, form, module->priority, piece->pipe, &points, &points_count,
-                               &border, &border_count, NULL, NULL, 0))
+  if(!_brush_get_points_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+                               &points, &points_count, &border, &border_count, NULL, NULL, 0))
   {
     free(points);
     free(border);
@@ -2722,8 +2722,8 @@ static int dt_brush_get_mask(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
   int points_count, border_count, payload_count;
-  if(!_brush_get_points_border(module->dev, form, module->priority, piece->pipe, &points, &points_count,
-                               &border, &border_count, &payload, &payload_count, 0))
+  if(!_brush_get_points_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+                               &points, &points_count, &border, &border_count, &payload, &payload_count, 0))
   {
     free(points);
     free(border);
@@ -2858,8 +2858,8 @@ static int dt_brush_get_mask_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t
   float *points = NULL, *border = NULL, *payload = NULL;
 
   int points_count, border_count, payload_count;
-  if(!_brush_get_points_border(module->dev, form, module->priority, piece->pipe, &points, &points_count,
-                               &border, &border_count, &payload, &payload_count, 0))
+  if(!_brush_get_points_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,
+                               &points, &points_count, &border, &border_count, &payload, &payload_count, 0))
   {
     free(points);
     free(border);

@@ -152,7 +152,8 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   const dt_image_t *const image = &(dev->image_storage);
 
   const int ch = piece->colors;
-  const int priority = self->priority;
+  //  const int priority = self->priority;
+  const float iop_order = self->iop_order;
 
   const dt_dev_rawoverexposed_mode_t mode = dev->rawoverexposed.mode;
   const int colorscheme = dev->rawoverexposed.colorscheme;
@@ -202,7 +203,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     }
 
     // where did they come from?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, 0, priority, bufptr, roi_out->width);
+    /*
+        dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, 0, priority, bufptr, roi_out->width);
+    */
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL,
+                                      bufptr, roi_out->width);
 
     for(int i = 0; i < roi_out->width; i++)
     {
@@ -325,7 +330,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     }
 
     // where did they come from?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, 0, self->priority, bufptr, roi_out->width);
+    /*
+        dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, 0, self->priority, bufptr, roi_out->width);
+    */
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL,
+                                      bufptr, roi_out->width);
   }
 
   dev_coord = dt_opencl_alloc_device_buffer(devid, coordbufsize);

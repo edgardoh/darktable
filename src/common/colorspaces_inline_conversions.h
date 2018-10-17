@@ -235,6 +235,18 @@ static inline void dt_XYZ_to_sRGB(const float *const XYZ, float *sRGB)
     sRGB[c] = rgb[c] <= 0.0031308 ? 12.92 * rgb[c] : (1.0 + 0.055) * powf(rgb[c], 1.0 / 2.4) - 0.055;
 }
 
+static inline void dt_XYZ_to_RGB(const float *const XYZ, float *RGB)
+{
+  const float xyz_to_srgb_matrix[3][3] = { { 3.1338561, -1.6168667, -0.4906146 },
+                                           { -0.9787684, 1.9161415, 0.0334540 },
+                                           { 0.0719453, -0.2289914, 1.4052427 } };
+
+  // XYZ -> sRGB
+  RGB[0] = RGB[1] = RGB[2] = 0.f;
+  for(int r = 0; r < 3; r++)
+    for(int c = 0; c < 3; c++) RGB[r] += xyz_to_srgb_matrix[r][c] * XYZ[c];
+}
+
 /** uses D50 white point and clips the output to [0..1]. */
 static inline void dt_XYZ_to_sRGB_clipped(const float *const XYZ, float *sRGB)
 {
@@ -245,6 +257,20 @@ static inline void dt_XYZ_to_sRGB_clipped(const float *const XYZ, float *sRGB)
   for(int i = 0; i < 3; i++) sRGB[i] = CLIP(sRGB[i]);
 
 #undef CLIP
+}
+
+static inline void dt_RGB_to_sRGB(const float *const RGB, float *sRGB)
+{
+  // linear sRGB -> gamma corrected sRGB
+  for(int c = 0; c < 3; c++)
+    sRGB[c] = RGB[c] <= 0.0031308 ? 12.92 * RGB[c] : (1.0 + 0.055) * powf(RGB[c], 1.0 / 2.4) - 0.055;
+}
+
+static inline void dt_sRGB_to_RGB(const float *const sRGB, float *RGB)
+{
+  // gamma corrected sRGB -> linear sRGB
+  for(int c = 0; c < 3; c++)
+    RGB[c] = sRGB[c] <= 0.04045 ? sRGB[c] / 12.92 : powf((sRGB[c] + 0.055) / (1 + 0.055), 2.4);
 }
 
 static inline void dt_sRGB_to_XYZ(const float *const sRGB, float *XYZ)
@@ -259,6 +285,18 @@ static inline void dt_sRGB_to_XYZ(const float *const sRGB, float *XYZ)
   // gamma corrected sRGB -> linear sRGB
   for(int c = 0; c < 3; c++)
     rgb[c] = sRGB[c] <= 0.04045 ? sRGB[c] / 12.92 : powf((sRGB[c] + 0.055) / (1 + 0.055), 2.4);
+  for(int r = 0; r < 3; r++)
+    for(int c = 0; c < 3; c++) XYZ[r] += srgb_to_xyz[r][c] * rgb[c];
+}
+
+static inline void dt_RGB_to_XYZ(const float *const rgb, float *XYZ)
+{
+  const float srgb_to_xyz[3][3] = { { 0.4360747, 0.3850649, 0.1430804 },
+                                    { 0.2225045, 0.7168786, 0.0606169 },
+                                    { 0.0139322, 0.0971045, 0.7141733 } };
+
+  // sRGB -> XYZ
+  XYZ[0] = XYZ[1] = XYZ[2] = 0.0;
   for(int r = 0; r < 3; r++)
     for(int c = 0; c < 3; c++) XYZ[r] += srgb_to_xyz[r][c] * rgb[c];
 }

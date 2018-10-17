@@ -17,17 +17,18 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "develop/pixelpipe.h"
 #include "common/color_picker.h"
 #include "common/colorspaces.h"
 #include "common/histogram.h"
 #include "common/imageio.h"
+#include "common/iop_priorities.h"
 #include "common/opencl.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/format.h"
 #include "develop/imageop_math.h"
-#include "develop/pixelpipe.h"
 #include "develop/tiling.h"
 #include "gui/gtk.h"
 #include "libs/colorpicker.h"
@@ -152,6 +153,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe, size_t size, int32_t 
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
+  pipe->iop = NULL;
 
   return 1;
 }
@@ -214,6 +216,12 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   }
   g_list_free(pipe->nodes);
   pipe->nodes = NULL;
+  // also cleanup iop here
+  if(pipe->iop)
+  {
+    g_list_free(pipe->iop);
+    pipe->iop = NULL;
+  }
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
 
@@ -222,8 +230,10 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   pipe->shutdown = 0;
   g_assert(pipe->nodes == NULL);
+  g_assert(pipe->iop == NULL);
   // for all modules in dev:
-  GList *modules = dev->iop;
+  pipe->iop = g_list_copy(dev->iop);
+  GList *modules = pipe->iop;
   while(modules)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -237,7 +247,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       piece->histogram_stats.bins_count = 0;
       piece->histogram_stats.pixels = 0;
       piece->colors
-          = ((dt_iop_module_colorspace(module) == iop_cs_RAW) && (pipe->image.flags & DT_IMAGE_RAW)) ? 1 : 4;
+          = ((module->get_colorspace_in(module, NULL) == iop_cs_RAW) && (pipe->image.flags & DT_IMAGE_RAW)) ? 1
+                                                                                                            : 4;
       piece->iscale = pipe->iscale;
       piece->iwidth = pipe->iwidth;
       piece->iheight = pipe->iheight;
@@ -250,6 +261,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       dt_iop_init_pipe(piece->module, pipe, piece);
       pipe->nodes = g_list_append(pipe->nodes, piece);
     }
+
+    // printf("[dt_dev_pixelpipe_create_nodes] %s(%f) %i\n", module->op, module->iop_order, module->priority);
     modules = g_list_next(modules);
   }
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
@@ -376,7 +389,7 @@ static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel, 
     histogram_params.roi = &histogram_roi;
   }
 
-  const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  const dt_iop_colorspace_type_t cst = piece->module->get_colorspace_out(piece->module, piece);
 
   dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, pixel, histogram);
   dt_histogram_max_helper(&piece->histogram_stats, cst, histogram, histogram_max);
@@ -423,7 +436,7 @@ static void histogram_collect_cl(int devid, dt_dev_pixelpipe_iop_t *piece, cl_me
     histogram_params.roi = &histogram_roi;
   }
 
-  const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  const dt_iop_colorspace_type_t cst = piece->module->get_colorspace_out(piece->module, piece);
 
   dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, pixel, histogram);
   dt_histogram_max_helper(&piece->histogram_stats, cst, histogram, histogram_max);
@@ -467,8 +480,9 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t *
   }
 
   // transform back to current module coordinates
-  dt_dev_distort_backtransform_plus(darktable.develop, darktable.develop->preview_pipe,
-                                    module->priority + (picker_source == PIXELPIPE_PICKER_INPUT ? 0 : 1), 99999,
+  dt_dev_distort_backtransform_plus(darktable.develop, darktable.develop->preview_pipe, module->iop_order,
+                                    ((picker_source == PIXELPIPE_PICKER_INPUT) ? DT_DEV_TRANSFORM_DIR_FORW_INCL
+                                                                               : DT_DEV_TRANSFORM_DIR_FORW_EXCL),
                                     fbox, 2);
 
   fbox[0] -= roi->x;
@@ -651,6 +665,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_get_times(&start);
     // we're looking for the full buffer
     {
+      (*out_format)->cst = (pipe->image.flags & DT_IMAGE_RAW) ? iop_cs_RAW : iop_cs_linear_rgb;
+
       if(roi_out->scale == 1.0 && roi_out->x == 0 && roi_out->y == 0 && pipe->iwidth == roi_out->width
          && pipe->iheight == roi_out->height)
       {
@@ -952,6 +968,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // transform colorspace as requested by the module
+          if(success_opencl)
+          {
+            success_opencl = dt_iop_transform_image_colorspace_cl(
+                module, piece->pipe->devid, cl_mem_input, roi_in.width, roi_in.height, (input_format->cst),
+                module->get_colorspace_in(module, piece), &(input_format->cst));
+          }
+
           /* now call process_cl of module; module should emit meaningful messages in case of error */
           if(success_opencl)
           {
@@ -959,6 +983,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                 = module->process_cl(module, piece, cl_mem_input, *cl_mem_output, &roi_in, roi_out);
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
+
+            (*out_format)->cst = module->get_colorspace_out(module, piece);
           }
 
           if(pipe->shutdown)
@@ -997,6 +1023,23 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           {
             dt_pthread_mutex_unlock(&pipe->busy_mutex);
             return 1;
+          }
+
+          // blend module needs in and out images on the same colorspace
+          if(success_opencl)
+          {
+            if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+            {
+              success_opencl = dt_iop_transform_image_colorspace_cl(
+                  module, piece->pipe->devid, cl_mem_input, roi_in.width, roi_in.height, (input_format->cst),
+                  dt_develop_get_blend_colorspace(module, piece), &(input_format->cst));
+              if(success_opencl)
+              {
+                success_opencl = dt_iop_transform_image_colorspace_cl(
+                    module, piece->pipe->devid, cl_mem_input, roi_out->width, roi_out->height,
+                    ((*out_format)->cst), dt_develop_get_blend_colorspace(module, piece), &((*out_format)->cst));
+              }
+            }
           }
 
           /* process blending */
@@ -1091,6 +1134,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // transform colorspace as requested by the module
+          if(success_opencl)
+          {
+            dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                              module->get_colorspace_in(module, piece), &(input_format->cst));
+          }
+
           /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
           if(success_opencl)
           {
@@ -1098,6 +1148,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                 = module->process_tiling_cl(module, piece, input, *output, &roi_in, roi_out, in_bpp);
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU);
+
+            (*out_format)->cst = module->get_colorspace_out(module, piece);
           }
 
           if(pipe->shutdown)
@@ -1129,6 +1181,20 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           {
             dt_pthread_mutex_unlock(&pipe->busy_mutex);
             return 1;
+          }
+
+          // blend module needs in and out images on the same colorspace
+          if(success_opencl)
+          {
+            if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+            {
+              dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                                dt_develop_get_blend_colorspace(module, piece),
+                                                &(input_format->cst));
+              dt_iop_transform_image_colorspace(module, *output, roi_in.width, roi_in.height, ((*out_format)->cst),
+                                                dt_develop_get_blend_colorspace(module, piece),
+                                                &((*out_format)->cst));
+            }
           }
 
           /* do process blending on cpu (this is anyhow fast enough) */
@@ -1297,6 +1363,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // transform colorspace as requested by the module
+          dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height,
+                                            (input_format->cst), module->get_colorspace_in(module, piece),
+                                            &(input_format->cst));
+
           /* process module on cpu. use tiling if needed and possible. */
           if(piece->process_tiling_ready
              && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1313,6 +1384,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
           }
+
+          (*out_format)->cst = module->get_colorspace_out(module, piece);
 
           if(pipe->shutdown)
           {
@@ -1343,6 +1416,17 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           {
             dt_pthread_mutex_unlock(&pipe->busy_mutex);
             return 1;
+          }
+
+          // blend module needs in and out images on the same colorspace
+          if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+          {
+            dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                              dt_develop_get_blend_colorspace(module, piece),
+                                              &(input_format->cst));
+            dt_iop_transform_image_colorspace(module, *output, roi_out->width, roi_out->height,
+                                              ((*out_format)->cst), dt_develop_get_blend_colorspace(module, piece),
+                                              &((*out_format)->cst));
           }
 
           /* process blending on cpu */
@@ -1430,6 +1514,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           return 1;
         }
 
+        // transform colorspace as requested by the module
+        dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, (input_format->cst),
+                                          module->get_colorspace_in(module, piece), &(input_format->cst));
+
         /* process module on cpu. use tiling if needed and possible. */
         if(piece->process_tiling_ready
            && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1446,6 +1534,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
           pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
         }
+
+        (*out_format)->cst = module->get_colorspace_out(module, piece);
 
         if(pipe->shutdown)
         {
@@ -1476,6 +1566,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
         {
           dt_pthread_mutex_unlock(&pipe->busy_mutex);
           return 1;
+        }
+
+        // blend module needs in and out images on the same colorspace
+        if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+        {
+          dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                            dt_develop_get_blend_colorspace(module, piece), &(input_format->cst));
+          dt_iop_transform_image_colorspace(module, *output, roi_out->width, roi_out->height, ((*out_format)->cst),
+                                            dt_develop_get_blend_colorspace(module, piece), &((*out_format)->cst));
         }
 
         /* process blending */
@@ -1528,6 +1627,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
         return 1;
       }
 
+      // transform colorspace as requested by the module
+      dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, (input_format->cst),
+                                        module->get_colorspace_in(module, piece), &(input_format->cst));
+
       /* process module on cpu. use tiling if needed and possible. */
       if(piece->process_tiling_ready
          && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1544,6 +1647,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
         pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
         pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
       }
+
+      (*out_format)->cst = module->get_colorspace_out(module, piece);
 
       if(pipe->shutdown)
       {
@@ -1574,6 +1679,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       {
         dt_pthread_mutex_unlock(&pipe->busy_mutex);
         return 1;
+      }
+
+      // blend module needs in and out images on the same colorspace
+      if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+      {
+        dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                          dt_develop_get_blend_colorspace(module, piece), &(input_format->cst));
+        dt_iop_transform_image_colorspace(module, *output, roi_out->width, roi_out->height, ((*out_format)->cst),
+                                          dt_develop_get_blend_colorspace(module, piece), &((*out_format)->cst));
       }
 
       /* process blending */
@@ -1613,6 +1727,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       return 1;
     }
 
+    // transform colorspace as requested by the module
+    dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, (input_format->cst),
+                                      module->get_colorspace_in(module, piece), &(input_format->cst));
+
     /* process module on cpu. use tiling if needed and possible. */
     if(piece->process_tiling_ready
        && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1629,6 +1747,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
       pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     }
+
+    (*out_format)->cst = module->get_colorspace_out(module, piece);
 
     if(pipe->shutdown)
     {
@@ -1658,6 +1778,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     {
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
       return 1;
+    }
+
+    // blend module needs in and out images on the same colorspace
+    if(!dt_develop_blend_process_skipped(module, piece, &roi_in, roi_out))
+    {
+      dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, (input_format->cst),
+                                        dt_develop_get_blend_colorspace(module, piece), &(input_format->cst));
+      dt_iop_transform_image_colorspace(module, *output, roi_out->width, roi_out->height, ((*out_format)->cst),
+                                        dt_develop_get_blend_colorspace(module, piece), &((*out_format)->cst));
     }
 
     /* process blending */
@@ -1693,7 +1822,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     module_label = NULL;
 
     // in case we get this buffer from the cache in the future, cache some stuff:
+    const int cst_old = (*out_format)->cst;
     **out_format = piece->dsc_out = pipe->dsc;
+    (*out_format)->cst = cst_old;
 
     dt_pthread_mutex_unlock(&pipe->busy_mutex);
     if(module == darktable.develop->gui_module)
@@ -2266,8 +2397,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   if(darktable.unmuted & DT_DEBUG_DEV) dt_dev_pixelpipe_cache_print(&pipe->cache);
 
   //  go through list of modules from the end:
-  guint pos = g_list_length(dev->iop);
-  GList *modules = g_list_last(dev->iop);
+  guint pos = g_list_length(pipe->iop);
+  GList *modules = g_list_last(pipe->iop);
   GList *pieces = g_list_last(pipe->nodes);
 
 // re-entry point: in case of late opencl errors we start all over again with opencl-support disabled
@@ -2365,7 +2496,7 @@ void dt_dev_pixelpipe_get_dimensions(dt_dev_pixelpipe_t *pipe, struct dt_develop
   dt_pthread_mutex_lock(&pipe->busy_mutex);
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out;
-  GList *modules = dev->iop;
+  GList *modules = pipe->iop;
   GList *pieces = pipe->nodes;
   while(modules)
   {

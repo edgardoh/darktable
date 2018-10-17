@@ -2663,8 +2663,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     float ivecl = sqrt(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999, points,
-                                      2);
+    /*
+        dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999, points,
+                                          2);
+    */
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+                                      DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
     float ovecl = sqrt(ovec[0] * ovec[0] + ovec[1] * ovec[1]);
@@ -2676,7 +2680,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // do modules coming before this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, 0, self->priority - 1);
+    /*
+        uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, 0, self->priority - 1);
+    */
+    uint64_t hash
+        = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
 
     dt_pthread_mutex_lock(&g->lock);
     g->isflipped = isflipped;
@@ -2795,8 +2803,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     float ivecl = sqrt(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999, points,
-                                      2);
+    /*
+        dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999, points,
+                                          2);
+    */
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+                                      DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
     float ovecl = sqrt(ovec[0] * ovec[0] + ovec[1] * ovec[1]);
@@ -2808,7 +2820,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // do modules coming before this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, 0, self->priority - 1);
+    /*
+        uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, 0, self->priority - 1);
+    */
+    uint64_t hash
+        = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
 
     dt_pthread_mutex_lock(&g->lock);
     g->isflipped = isflipped;
@@ -3130,7 +3146,11 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   }
 
   // third step: transform all points
-  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, self->priority, 9999999, my_points, total_points))
+  /*
+    if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, self->priority, 9999999, my_points, total_points))
+  */
+  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+                                    my_points, total_points))
     goto error;
 
   // fourth step: get bounding box in final coordinates (used later for checking "near"-ness to mouse pointer)
@@ -3177,6 +3197,43 @@ static int gui_has_focus(struct dt_iop_module_t *self)
   return self->dev->gui_module == self;
 }
 
+static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self,
+                                  float *points, size_t points_count)
+{
+  dt_pthread_mutex_lock(&dev->history_mutex);
+  GList *modules = g_list_first(pipe->iop);
+  GList *pieces = g_list_first(pipe->nodes);
+  while(modules)
+  {
+    if(!pieces)
+    {
+      dt_pthread_mutex_unlock(&dev->history_mutex);
+      return 0;
+    }
+    dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)(pieces->data);
+    /*
+        if(piece->enabled && module->priority <= pmax && module->priority >= pmin &&
+          !(dev->gui_module && dev->gui_module->operation_tags_filter() & module->operation_tags()))
+    */
+    if(module == self && piece->enabled &&
+       /*        ((transf_direction == DT_DEV_TRANSFORM_DIR_ALL) ||
+                   (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL && module->iop_order >= transf_direction) ||
+                   (transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL && module->iop_order > transf_direction) ||
+                   (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_INCL && module->iop_order <= transf_direction) ||
+                   (transf_direction == DT_DEV_TRANSFORM_DIR_BACK_EXCL && module->iop_order < transf_direction)
+                   ) && */
+       !(dev->gui_module && dev->gui_module->operation_tags_filter() & module->operation_tags()))
+    {
+      module->distort_transform(module, piece, points, points_count);
+    }
+    modules = g_list_next(modules);
+    pieces = g_list_next(pieces);
+  }
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+  return 1;
+}
+
 void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, int32_t height,
                      int32_t pointerx, int32_t pointery)
 {
@@ -3211,9 +3268,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                           {   ixo + iwd,  iyo       } };
 
     // convert coordinates of corners to coordinates of this module's output
-    if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->priority, self->priority + 1,
-      (float *)V, 4))
-      return;
+    /*
+        if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->priority, self->priority + 1,
+          (float *)V, 4))
+    */
+    // FIXME: not very sure why this was called...
+    if(!call_distort_transform(self->dev, self->dev->preview_pipe, self, (float *)V, 4)) return;
 
     // get x/y-offset as well as width and height of output buffer
     float xmin = FLT_MAX, ymin = FLT_MAX, xmax = FLT_MIN, ymax = FLT_MIN;
@@ -3234,8 +3294,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                             { xmin + p->cr * owd, ymin + p->ct * oht } };
 
     // convert clipping corners to final output image
-    if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999,
-      (float *)C, 4))
+    /*
+        if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->priority + 1, 9999999,
+          (float *)C, 4))
+    */
+    if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+                                      DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
       return;
 
     cairo_save(cr);
