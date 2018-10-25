@@ -71,7 +71,6 @@ add_iop(temperature "temperature.c" DEFAULT_VISIBLE)
 add_iop(colorcorrection "colorcorrection.c" DEFAULT_VISIBLE)
 add_iop(exposure "exposure.c" DEFAULT_VISIBLE)
 add_iop(loclaplab_eh "loclaplab_eh.c" DEFAULT_VISIBLE)
-add_iop(fbw_eh "fbw_eh.c" DEFAULT_VISIBLE)
 add_iop(equalizer "equalizer.c")
 add_iop(colorbalance "colorbalance.c")
 add_iop(colorin "colorin.c" DEFAULT_VISIBLE)
@@ -133,6 +132,10 @@ endif(RSVG2_FOUND)
 if(LENSFUN_FOUND)
   add_iop(lens "lens.c" DEFAULT_VISIBLE)
 endif(LENSFUN_FOUND)
+
+if(FFTW3_FOUND)
+  add_iop(fbw_eh "fbw_eh.c" DEFAULT_VISIBLE)
+endif(FFTW3_FOUND)
 
 # fix for Mac when OpenMP is only available in C compiler
 if(APPLE)

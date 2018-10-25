@@ -127,12 +127,10 @@ typedef struct
 
 typedef enum dt_iop_fbw_bw_methods_t
 {
-  dt_iop_fbw_bw_mix_dst = 0,
-  dt_iop_fbw_bw_max_dst = 1,
-  dt_iop_fbw_bw_mix_fft = 2,
-  dt_iop_fbw_bw_max_fft = 3,
-  dt_iop_fbw_bw_mix_dst_2 = 4,
-  dt_iop_fbw_bw_max_dst_2 = 5
+  dt_iop_fbw_bw_mix2 = 0,
+  dt_iop_fbw_bw_max2 = 1,
+  dt_iop_fbw_bw_mix = 2,
+  dt_iop_fbw_bw_max = 3
 } dt_iop_fbw_bw_methods_t;
 
 typedef struct dt_iop_fbw_params_t
@@ -182,15 +180,13 @@ static void show_hide_controls(dt_iop_module_t *self, dt_iop_fbw_gui_data_t *d, 
 {
   switch(p->bw_method)
   {
-  case dt_iop_fbw_bw_mix_fft:
-  case dt_iop_fbw_bw_mix_dst:
-  case dt_iop_fbw_bw_mix_dst_2:
+    case dt_iop_fbw_bw_mix:
+    case dt_iop_fbw_bw_mix2:
       gtk_widget_show(GTK_WIDGET(d->vbox_rgb));
       break;
     default:
-    case dt_iop_fbw_bw_max_fft:
-    case dt_iop_fbw_bw_max_dst:
-    case dt_iop_fbw_bw_max_dst_2:
+    case dt_iop_fbw_bw_max:
+    case dt_iop_fbw_bw_max2:
       gtk_widget_hide(GTK_WIDGET(d->vbox_rgb));
       break;
   }
@@ -306,7 +302,7 @@ void init(dt_iop_module_t *module)
 
   dt_iop_fbw_params_t tmp = { 0 };
 
-  tmp.bw_method = dt_iop_fbw_bw_mix_dst;
+  tmp.bw_method = dt_iop_fbw_bw_mix2;
   tmp.oddness = 15.f;
 
   tmp.red = 0.22248840f;
@@ -344,8 +340,6 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->cmb_bw_method, _("rgb max dst"));
   dt_bauhaus_combobox_add(g->cmb_bw_method, _("rgb mix fft"));
   dt_bauhaus_combobox_add(g->cmb_bw_method, _("rgb max fft"));
-  dt_bauhaus_combobox_add(g->cmb_bw_method, _("rgb mix dst 2"));
-  dt_bauhaus_combobox_add(g->cmb_bw_method, _("rgb max dst 2"));
   g_object_set(g->cmb_bw_method, "tooltip-text", _("b&w conversion method."), (char *)NULL);
   g_signal_connect(G_OBJECT(g->cmb_bw_method), "value-changed", G_CALLBACK(bw_method_callback), self);
 
@@ -731,7 +725,7 @@ static void gradient_rgb_max(float *img_src, float *img_grx, float *img_gry, con
   }
 }
 
-static void estimate_laplacian_fft(float *img_grx, float *img_gry, float *img_dest, const int width, const int height,
+static void estimate_laplacian(float *img_grx, float *img_gry, float *img_dest, const int width, const int height,
                                const int pad_w, const int pad_h)
 {
   const int stride = width * height;
@@ -771,7 +765,7 @@ static void estimate_laplacian_fft(float *img_grx, float *img_gry, float *img_de
   }
 }
 
-static void estimate_laplacian_dst(float *img_grx, float *img_gry, float *img_dest, const int width, const int height)
+static void estimate_laplacian2(float *img_grx, float *img_gry, float *img_dest, const int width, const int height)
 {
   const int stride = width * height;
 
@@ -822,7 +816,7 @@ cleanup:
   if(img_gyy) dt_free_align(img_gyy);
 }
 
-static void recontruct_laplacian_fft(float *img_src, float *img_dest, const int width, const int height,
+static void recontruct_laplacian(float *img_src, float *img_dest, const int width, const int height,
                                  dt_pthread_mutex_t *fftw3_lock)
 {
   fbw_fft_t fft_fbw = { 0 };
@@ -986,7 +980,7 @@ cleanup:
   dt_pthread_mutex_unlock(fftw3_lock);
 }
 
-static void recontruct_laplacian_dst(float *img_src, float *img_dest, const int width, const int height,
+static void recontruct_laplacian2(float *img_src, float *img_dest, const int width, const int height,
                                   dt_pthread_mutex_t *fftw3_lock)
 {
   float *img_dst = NULL;
@@ -1073,92 +1067,35 @@ static void fbw_process(const float *const img_src, float *const img_dest, const
   if(img_gry == NULL) goto cleanup;
 
   img_padded = dt_alloc_align(
-      64, iwidth * iheight * ((bw_method == dt_iop_fbw_bw_mix_fft || bw_method == dt_iop_fbw_bw_mix_dst) ? 1 : ch)
+      64, iwidth * iheight * ((bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_mix2) ? 1 : ch)
               * sizeof(float));
   if(img_padded == NULL) goto cleanup;
 
-  if(bw_method == dt_iop_fbw_bw_mix_fft || bw_method == dt_iop_fbw_bw_mix_dst)
+  if(bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_mix2)
     pad_image_mix(img_src, width, height, ch, img_padded, pad_w, pad_h, rgb);
   else
     pad_image_max(img_src, width, height, ch, img_padded, pad_w, pad_h);
 
-  if(bw_method == dt_iop_fbw_bw_mix_fft || bw_method == dt_iop_fbw_bw_mix_dst)
+  if(bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_mix2)
     gradient_rgb_mix(img_padded, img_grx, img_gry, iwidth, iheight, pad_w, pad_h, oddness, image_scale);
   else
     gradient_rgb_max(img_padded, img_grx, img_gry, iwidth, iheight, pad_w, pad_h, oddness, image_scale);
 
-  if(bw_method == dt_iop_fbw_bw_mix_fft || bw_method == dt_iop_fbw_bw_max_fft)
-    estimate_laplacian_fft(img_grx, img_gry, img_padded, iwidth, iheight, pad_w, pad_h);
+  if(bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_max)
+    estimate_laplacian(img_grx, img_gry, img_padded, iwidth, iheight, pad_w, pad_h);
   else
-    estimate_laplacian_dst(img_grx, img_gry, img_padded, iwidth, iheight);
+    estimate_laplacian2(img_grx, img_gry, img_padded, iwidth, iheight);
 
-  if(bw_method == dt_iop_fbw_bw_mix_fft || bw_method == dt_iop_fbw_bw_max_fft)
-    recontruct_laplacian_fft(img_padded, img_gry, iwidth, iheight, fftw3_lock);
+  if(bw_method == dt_iop_fbw_bw_mix || bw_method == dt_iop_fbw_bw_max)
+    recontruct_laplacian(img_padded, img_gry, iwidth, iheight, fftw3_lock);
   else
-    recontruct_laplacian_dst(img_padded, img_gry, iwidth, iheight, fftw3_lock);
+    recontruct_laplacian2(img_padded, img_gry, iwidth, iheight, fftw3_lock);
 
   unpad_image(img_gry, width, height, img_grx, pad_w, pad_h);
 
   normalize(img_grx, width, height, img_min_out, img_max_out, *img_min_in, *img_max_in);
 
   image_to_output(img_grx, width, height, ch, img_dest);
-
-cleanup:
-  if(img_grx) dt_free_align(img_grx);
-  if(img_gry) dt_free_align(img_gry);
-  if(img_padded) dt_free_align(img_padded);
-}
-
-static void fbw_process_2(const float *const img_src, float *const img_dest, const int width, const int height, const int ch,
-                        const int bw_method, const float oddness, const float red, const float green,
-                        const float blue, float *img_min_in, float *img_max_in, float *img_min_out, float *img_max_out,
-                        const float image_scale, dt_pthread_mutex_t *fftw3_lock)
-{
-  float *img_padded = NULL;
-  float *img_grx = NULL;
-  float *img_gry = NULL;
-
-  const int pad_w = 1;
-  const int pad_h = pad_w;
-
-  const int iwidth = width + pad_w * 2;
-  const int iheight = height + pad_h * 2;
-
-  const float rgb[3] = { red, green, blue };
-
-  if(isnan(*img_min_in) || isnan(*img_max_in))
-    get_stats(img_src, width, height, ch, img_min_in, img_max_in);
-  
-  img_grx = dt_alloc_align(64, iwidth * iheight * sizeof(float));
-  if(img_grx == NULL) goto cleanup;
-
-  img_gry = dt_alloc_align(64, iwidth * iheight * sizeof(float));
-  if(img_gry == NULL) goto cleanup;
-
-  img_padded = dt_alloc_align(
-      64, iwidth * iheight * ((bw_method == dt_iop_fbw_bw_mix_dst_2) ? 1 : ch)
-              * sizeof(float));
-  if(img_padded == NULL) goto cleanup;
-
-  if(bw_method == dt_iop_fbw_bw_mix_dst_2)
-    pad_image_mix(img_src, width, height, ch, img_padded, pad_w, pad_h, rgb);
-  else
-    pad_image_max(img_src, width, height, ch, img_padded, pad_w, pad_h);
-
-  if(bw_method == dt_iop_fbw_bw_mix_dst_2)
-    gradient_rgb_mix(img_padded, img_grx, img_gry, iwidth, iheight, pad_w, pad_h, oddness, image_scale);
-  else
-    gradient_rgb_max(img_padded, img_grx, img_gry, iwidth, iheight, pad_w, pad_h, oddness, image_scale);
-
-  estimate_laplacian_dst(img_grx, img_gry, img_padded, iwidth, iheight);
-
-  unpad_image(img_padded, width, height, img_grx, pad_w, pad_h);
-  
-  recontruct_laplacian_dst(img_grx, img_gry, width, height, fftw3_lock);
-
-  normalize(img_gry, width, height, img_min_out, img_max_out, *img_min_in, *img_max_in);
-
-  image_to_output(img_gry, width, height, ch, img_dest);
 
 cleanup:
   if(img_grx) dt_free_align(img_grx);
@@ -1196,14 +1133,9 @@ void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piec
     dt_pthread_mutex_unlock(&g->lock);
   }
 
-  if(p->bw_method == dt_iop_fbw_bw_mix_fft || p->bw_method == dt_iop_fbw_bw_max_fft ||
-      p->bw_method == dt_iop_fbw_bw_mix_dst || p->bw_method == dt_iop_fbw_bw_max_dst)
-    fbw_process((float *)ivoid, (float *)ovoid, roi_in->width, roi_in->height, piece->colors, p->bw_method,
-                p->oddness / 100.f, p->red, p->green, p->blue, &img_min_in, &img_max_in, &img_min_out, &img_max_out, image_scale, &darktable.fftw3_threadsafe);
-  else
-    fbw_process_2((float *)ivoid, (float *)ovoid, roi_in->width, roi_in->height, piece->colors, p->bw_method,
-                p->oddness / 100.f, p->red, p->green, p->blue, &img_min_in, &img_max_in, &img_min_out, &img_max_out, image_scale, &darktable.fftw3_threadsafe);
- 
+  fbw_process((float *)ivoid, (float *)ovoid, roi_in->width, roi_in->height, piece->colors, p->bw_method,
+              p->oddness / 100.f, p->red, p->green, p->blue, &img_min_in, &img_max_in, &img_min_out, &img_max_out, image_scale, &darktable.fftw3_threadsafe);
+
   // if preview pipe, store the image range
   if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
