@@ -29,6 +29,7 @@
 #include "develop/blend.h"
 #include "develop/format.h"
 #include "develop/imageop_math.h"
+#include "develop/masks.h"
 #include "develop/tiling.h"
 #include "gui/gtk.h"
 #include "libs/colorpicker.h"
@@ -154,6 +155,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe, size_t size, int32_t 
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
   pipe->iop = NULL;
+  pipe->forms = NULL;
 
   return 1;
 }
@@ -192,6 +194,11 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
   pipe->icc_filename = NULL;
+  if(pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
 }
 
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
@@ -2396,6 +2403,10 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // printf("pixelpipe homebrew process start\n");
   if(darktable.unmuted & DT_DEBUG_DEV) dt_dev_pixelpipe_cache_print(&pipe->cache);
 
+  // get a snapshot of mask list
+  if(pipe->forms) g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+  pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+
   //  go through list of modules from the end:
   guint pos = g_list_length(pipe->iop);
   GList *modules = g_list_last(pipe->iop);
@@ -2460,6 +2471,11 @@ restart:
   }
 
   // release resources:
+  if(pipe->forms)
+  {
+    g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);
+    pipe->forms = NULL;
+  }
   if(pipe->devid >= 0)
   {
     dt_opencl_unlock_device(pipe->devid);

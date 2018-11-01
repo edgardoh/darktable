@@ -107,6 +107,11 @@ static GList *_dup_masks_forms_deep(GList *forms, dt_masks_form_t *form)
   return (GList *)g_list_copy_deep(forms, _dup_masks_form_cb, (gpointer)form);
 }
 
+GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
+{
+  return _dup_masks_forms_deep(forms, form);
+}
+
 static _masks_undo_data_t *_create_snapshot(GList *forms, dt_masks_form_t *form, dt_develop_t *dev)
 {
   _masks_undo_data_t *data = malloc(sizeof(struct _masks_undo_data_t));
@@ -963,6 +968,17 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
   darktable.develop->allforms = g_list_append(darktable.develop->allforms, form);
 
   return form;
+}
+
+dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id)
+{
+  while(forms)
+  {
+    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+    if(form->formid == id) return form;
+    forms = g_list_next(forms);
+  }
+  return NULL;
 }
 
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id)
