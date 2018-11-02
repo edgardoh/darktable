@@ -956,7 +956,7 @@ static void dt_iop_gui_movedown_callback(GtkButton *button, dt_iop_module_t *mod
   dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 1");
   if(!prev) return;
 
-  const int moved = dt_move_iop_before(module, prev, 1, 1);
+  const int moved = dt_move_iop_before(module->dev, module, prev, 1, 1);
   dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 2");
   if(!moved) return;
 
@@ -992,7 +992,7 @@ static void dt_iop_gui_moveup_callback(GtkButton *button, dt_iop_module_t *modul
   dt_iop_module_t *next = dt_iop_gui_get_next_visible_module(module);
   if(!next) return;
 
-  const int moved = dt_move_iop_after(module, next, 1, 1);
+  const int moved = dt_move_iop_after(module->dev, module, next, 1, 1);
   if(!moved) return;
 
   // we move the headers

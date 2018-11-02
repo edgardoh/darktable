@@ -36,6 +36,13 @@ typedef struct dt_iop_priority_entry_t
   char operation[20];
 } dt_iop_priority_entry_t;
 
+typedef struct _former_iop_priorities_t
+{
+  int priority;
+  int multi_priority;
+  char operation[20];
+} _former_iop_priorities_t;
+
 typedef struct dt_iop_priority_rule_t
 {
   char op_prev[20];
@@ -61,16 +68,16 @@ int dt_iop_priorities_get_iop_priority(const char *op_name);
 int dt_iop_priorities_get_new_iop_multi_priority(dt_develop_t *dev, const char *op_name);
 
 /** returns the iop_order before module_next if module can be moved */
-float dt_get_iop_order_before_iop(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
-                                  const int log_error);
+float dt_get_iop_order_before_iop(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_next,
+                                  const int validate_order, const int log_error);
 /** returns the iop_order after module_prev if module can be moved */
-float dt_get_iop_order_after_iop(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
-                                 const int log_error);
+float dt_get_iop_order_after_iop(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                                 const int validate_order, const int log_error);
 
-int dt_move_iop_before(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
-                       const int log_error);
-int dt_move_iop_after(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
-                      const int log_error);
+int dt_move_iop_before(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_next,
+                       const int validate_order, const int log_error);
+int dt_move_iop_after(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                      const int validate_order, const int log_error);
 float get_iop_default_order(const char *op_name);
 dt_iop_module_t *dt_iop_priorities_get_last_instance(dt_develop_t *dev, dt_iop_module_t *module);
 

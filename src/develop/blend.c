@@ -2938,7 +2938,7 @@ void dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelp
 
   /* get channel max values depending on colorspace */
   const dt_iop_colorspace_type_t cst = dt_develop_get_blend_colorspace(self, piece);
-  printf("[dt_develop_blend_process] self->blend_params->cst=%i, cst=%i\n", self->blend_params->cst, cst);
+  // printf("[dt_develop_blend_process] self->blend_params->cst=%i, cst=%i\n", self->blend_params->cst, cst);
   /* allocate space for blend mask */
   float *_mask = dt_alloc_align(64, (size_t)roi_out->width * roi_out->height * sizeof(float));
   if(!_mask)

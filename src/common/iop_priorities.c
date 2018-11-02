@@ -693,10 +693,10 @@ dt_iop_module_t *dt_iop_priorities_get_last_instance(dt_develop_t *dev, dt_iop_m
 // if module can be placed before than module_next on the pipe
 // it returns the new iop_order
 // if it cannot be placed it returns the current module->iop_order
-float dt_get_iop_order_before_iop(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
-                                  const int log_error)
+float dt_get_iop_order_before_iop(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_next,
+                                  const int validate_order, const int log_error)
 {
-  dt_develop_t *dev = module->dev;
+  // dt_develop_t *dev = module->dev;
   float iop_order = module->iop_order;
   int module_found = 0;
   int rule_found = 0;
@@ -905,10 +905,10 @@ float dt_get_iop_order_before_iop(dt_iop_module_t *module, dt_iop_module_t *modu
 // if module can be placed after than module_prev on the pipe
 // it returns the new iop_order
 // if it cannot be placed it returns the current module->iop_order
-float dt_get_iop_order_after_iop(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
-                                 const int log_error)
+float dt_get_iop_order_after_iop(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                                 const int validate_order, const int log_error)
 {
-  dt_develop_t *dev = module->dev;
+  // dt_develop_t *dev = module->dev;
   float iop_order = module->iop_order;
 
   // moving after module_prev is the same as moving before the very next one after module_prev
@@ -928,7 +928,7 @@ float dt_get_iop_order_after_iop(dt_iop_module_t *module, dt_iop_module_t *modul
             module_prev->op, module->op);
   }
   else
-    iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order, log_error);
+    iop_order = dt_get_iop_order_before_iop(dev, module, module_next, validate_order, log_error);
 
   return iop_order;
 }
@@ -936,17 +936,17 @@ float dt_get_iop_order_after_iop(dt_iop_module_t *module, dt_iop_module_t *modul
 // changes the module->iop_order so it comes before in the pipe than module_next
 // sort dev->iop to reflect the changes
 // return 1 if iop_order is changed, 0 otherwise
-int dt_move_iop_before(dt_iop_module_t *module, dt_iop_module_t *module_next, const int validate_order,
-                       const int log_error)
+int dt_move_iop_before(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_next,
+                       const int validate_order, const int log_error)
 {
-  dt_develop_t *dev = module->dev;
+  // dt_develop_t *dev = module->dev;
   int moved = 0;
 
   // dt_iop_priorities_check_priorities(dev, "dt_move_iop_before begin");
   // printf("[dt_move_iop_before] moving %s(%f) before %s(%f)\n", module->op, module->iop_order, module_next->op,
   // module_next->iop_order);
 
-  const float iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order, log_error);
+  const float iop_order = dt_get_iop_order_before_iop(dev, module, module_next, validate_order, log_error);
   // printf("[dt_move_iop_before] new iop_order for %s is %f\n", module->op, iop_order);
 
   if(module->iop_order != iop_order)
@@ -966,12 +966,12 @@ int dt_move_iop_before(dt_iop_module_t *module, dt_iop_module_t *module_next, co
 // changes the module->iop_order so it comes after in the pipe than module_prev
 // sort dev->iop to reflect the changes
 // return 1 if iop_order is changed, 0 otherwise
-int dt_move_iop_after(dt_iop_module_t *module, dt_iop_module_t *module_prev, const int validate_order,
-                      const int log_error)
+int dt_move_iop_after(dt_develop_t *dev, dt_iop_module_t *module, dt_iop_module_t *module_prev,
+                      const int validate_order, const int log_error)
 {
   // printf("[dt_move_iop_after] moving %s(%f) after %s(%f)\n", module->op, module->iop_order, module_prev->op,
   // module_prev->iop_order);
-  dt_develop_t *dev = module->dev;
+  // dt_develop_t *dev = module->dev;
   int moved = 0;
 
   // dt_iop_priorities_check_priorities(dev, "dt_move_iop_after begin");
@@ -995,7 +995,7 @@ int dt_move_iop_after(dt_iop_module_t *module, dt_iop_module_t *module_prev, con
     }
 
     const float iop_order = dt_get_iop_order_before_iop(module, module_next, validate_order);*/
-  const float iop_order = dt_get_iop_order_after_iop(module, module_prev, validate_order, log_error);
+  const float iop_order = dt_get_iop_order_after_iop(dev, module, module_prev, validate_order, log_error);
   // printf("[dt_move_iop_after] new iop_order for %s is %f\n", module->op, iop_order);
   if(module->iop_order != iop_order)
   {
@@ -1131,6 +1131,178 @@ dev_mod->priority, dt_mod->op, dt_mod->priority);
   fprintf(stderr, "[dt_iop_priorities_rebuild_order] there are more modules on darktable than in dev!\n");
 }
 */
+
+static dt_dev_history_item_t *_search_history_by_op_multi_priority(dt_develop_t *dev, dt_iop_module_t *module)
+{
+  dt_dev_history_item_t *ret_hist = NULL;
+  GList *history = g_list_first(dev->history);
+  while(history)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+
+    if(strcmp(module->op, hist->module->op) == 0 && module->multi_priority == hist->multi_priority)
+    {
+      ret_hist = hist;
+      break;
+    }
+
+    history = g_list_next(history);
+  }
+  return ret_hist;
+}
+
+static _former_iop_priorities_t *_search_pipe_by_op_multi_priority(GList *old_priorities_list,
+                                                                   dt_iop_module_t *module)
+{
+  _former_iop_priorities_t *ret_pi = NULL;
+  GList *pipe = g_list_first(old_priorities_list);
+  while(pipe)
+  {
+    _former_iop_priorities_t *pi = (_former_iop_priorities_t *)pipe->data;
+
+    if(strcmp(module->op, pi->operation) == 0 && module->multi_priority == pi->multi_priority)
+    {
+      ret_pi = pi;
+      break;
+    }
+
+    pipe = g_list_next(pipe);
+  }
+  return ret_pi;
+}
+
+static void _check_rules(dt_develop_t *dev, const char *msg)
+{
+  GList *modules = NULL;
+
+  // check for IOP_FLAGS_FENCE on each module
+  // create a list of fences modules
+  GList *fences = NULL;
+  modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+    if(mod->flags() & IOP_FLAGS_FENCE)
+    {
+      fences = g_list_append(fences, mod);
+    }
+
+    modules = g_list_next(modules);
+  }
+
+  // check if each module is between the fences
+  modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+    dt_iop_module_t *fence_prev = NULL;
+    dt_iop_module_t *fence_next = NULL;
+
+    GList *mod_fences = g_list_first(fences);
+    while(mod_fences)
+    {
+      dt_iop_module_t *mod_fence = (dt_iop_module_t *)mod_fences->data;
+
+      // mod should be before this fence
+      if(mod->priority < mod_fence->priority)
+      {
+        if(fence_next == NULL)
+          fence_next = mod_fence;
+        else if(mod_fence->priority < fence_next->priority)
+          fence_next = mod_fence;
+      }
+      // mod should be after this fence
+      else if(mod->priority > mod_fence->priority)
+      {
+        if(fence_prev == NULL)
+          fence_prev = mod_fence;
+        else if(mod_fence->priority > fence_prev->priority)
+          fence_prev = mod_fence;
+      }
+
+      mod_fences = g_list_next(mod_fences);
+    }
+
+    // now check if mod is between the fences
+    if(fence_next && mod->iop_order > fence_next->iop_order)
+    {
+      fprintf(stderr, "[_check_rules] found fence %s %s module %s %s(%f) is after %s %s(%f) (%s)\n",
+              fence_next->op, fence_next->multi_name, mod->op, mod->multi_name, mod->iop_order, fence_next->op,
+              fence_next->multi_name, fence_next->iop_order, msg);
+    }
+    if(fence_prev && mod->iop_order < fence_prev->iop_order)
+    {
+      fprintf(stderr, "[_check_rules] found fence %s %s module %s %s(%f) is before %s %s(%f) (%s)\n",
+              fence_prev->op, fence_prev->multi_name, mod->op, mod->multi_name, mod->iop_order, fence_prev->op,
+              fence_prev->multi_name, fence_prev->iop_order, msg);
+    }
+
+
+    modules = g_list_next(modules);
+  }
+
+  // for each module check if it doesn't break a rule
+  modules = g_list_first(dev->iop);
+  while(modules)
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+    // we have a module, now check each rule
+    GList *rules = g_list_first(darktable.iop_priority_rules);
+    while(rules)
+    {
+      dt_iop_priority_rule_t *rule = (dt_iop_priority_rule_t *)rules->data;
+
+      // mod must be before rule->op_next
+      if(strcmp(mod->op, rule->op_prev) == 0)
+      {
+        // check if there's a rule->op_next module before mod
+        GList *modules_prev = g_list_previous(modules);
+        while(modules_prev)
+        {
+          dt_iop_module_t *mod_prev = (dt_iop_module_t *)modules_prev->data;
+
+          if(strcmp(mod_prev->op, rule->op_next) == 0)
+          {
+            fprintf(stderr, "[_check_rules] found rule %s %s module %s %s(%f) is after %s %s(%f) (%s)\n",
+                    rule->op_prev, rule->op_next, mod->op, mod->multi_name, mod->iop_order, mod_prev->op,
+                    mod_prev->multi_name, mod_prev->iop_order, msg);
+          }
+
+          modules_prev = g_list_previous(modules_prev);
+        }
+      }
+      // mod must be after rule->op_prev
+      else if(strcmp(mod->op, rule->op_next) == 0)
+      {
+        // check if there's a rule->op_prev module after mod
+        GList *modules_next = g_list_next(modules);
+        while(modules_next)
+        {
+          dt_iop_module_t *mod_next = (dt_iop_module_t *)modules_next->data;
+
+          if(strcmp(mod_next->op, rule->op_prev) == 0)
+          {
+            fprintf(stderr, "[_check_rules] found rule %s %s module %s %s(%f) is before %s %s(%f) (%s)\n",
+                    rule->op_prev, rule->op_next, mod->op, mod->multi_name, mod->iop_order, mod_next->op,
+                    mod_next->multi_name, mod_next->iop_order, msg);
+          }
+
+          modules_next = g_list_next(modules_next);
+        }
+      }
+
+      rules = g_list_next(rules);
+    }
+
+    modules = g_list_next(modules);
+  }
+
+  if(fences) g_list_free(fences);
+}
+
 void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
 {
   // printf("dt_iop_priorities_read_pipe begin\n");
@@ -1160,13 +1332,6 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
   int colorin_priority_old = -1;
   int colorout_priority_old = -1;
   int gamma_priority_old = -1;
-
-  typedef struct _former_iop_priorities_t
-  {
-    int priority;
-    int multi_priority;
-    char operation[20];
-  } _former_iop_priorities_t;
 
   GList *old_priorities_list = NULL;
 
@@ -1300,35 +1465,9 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
     {
       dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
 
-      int found_history = 0;
-      GList *history = g_list_first(dev->history);
-      while(history)
-      {
-        dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+      int found_history = (_search_history_by_op_multi_priority(dev, mod) != NULL);
 
-        if(strcmp(mod->op, hist->module->op) == 0 && mod->multi_priority == hist->multi_priority)
-        {
-          found_history = 1;
-          break;
-        }
-
-        history = g_list_next(history);
-      }
-
-      int found_pipe = 0;
-      GList *pipe = g_list_first(old_priorities_list);
-      while(pipe)
-      {
-        _former_iop_priorities_t *pi = (_former_iop_priorities_t *)pipe->data;
-
-        if(strcmp(mod->op, pi->operation) == 0 && mod->multi_priority == pi->multi_priority)
-        {
-          found_pipe = 1;
-          break;
-        }
-
-        pipe = g_list_next(pipe);
-      }
+      int found_pipe = (_search_pipe_by_op_multi_priority(old_priorities_list, mod) != NULL);
 
       int reset_list = 0;
 
@@ -1340,7 +1479,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
         {
           if(mod->iop_order >= demosaic_iop_order)
           {
-            if(dt_move_iop_before(mod, demosaic_module, 0, log_error))
+            if(dt_move_iop_before(dev, mod, demosaic_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before demosaic(%f)\n",
@@ -1351,7 +1490,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
         {
           if(mod->iop_order >= colorin_iop_order)
           {
-            if(dt_move_iop_before(mod, colorin_module, 0, log_error))
+            if(dt_move_iop_before(dev, mod, colorin_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before colorin(%f)\n",
@@ -1359,7 +1498,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
           }
           else if(mod->iop_order <= demosaic_iop_order)
           {
-            if(dt_move_iop_after(mod, demosaic_module, 0, log_error))
+            if(dt_move_iop_after(dev, mod, demosaic_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after demosaic(%f)\n",
@@ -1370,7 +1509,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
         {
           if(mod->iop_order >= colorout_iop_order)
           {
-            if(dt_move_iop_before(mod, colorout_module, 0, log_error))
+            if(dt_move_iop_before(dev, mod, colorout_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before colorout(%f)\n",
@@ -1378,7 +1517,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
           }
           else if(mod->iop_order <= colorin_iop_order)
           {
-            if(dt_move_iop_after(mod, colorin_module, 0, log_error))
+            if(dt_move_iop_after(dev, mod, colorin_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after colorin(%f)\n",
@@ -1389,7 +1528,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
         {
           if(mod->iop_order >= gamma_iop_order)
           {
-            if(dt_move_iop_before(mod, gamma_module, 0, log_error))
+            if(dt_move_iop_before(dev, mod, gamma_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) before gamma(%f)\n", mod->op,
@@ -1397,7 +1536,7 @@ void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid)
           }
           else if(mod->iop_order <= colorout_iop_order)
           {
-            if(dt_move_iop_after(mod, colorout_module, 0, log_error))
+            if(dt_move_iop_after(dev, mod, colorout_module, 0, log_error))
               reset_list = 1;
             else
               fprintf(stderr, "[dt_iop_priorities_read_pipe] can't move module %s(%f) after colorout(%f)\n",
@@ -1495,22 +1634,59 @@ int dt_iop_priorities_check_priorities(dt_develop_t *dev, const char *msg)
 {
   int priorities_ok = 1;
 
-  GList *modules = g_list_last(dev->iop);
-  if(modules)
+  // check if gamma is the last iop
   {
-    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
-
-    if(strcmp(mod->op, "gamma") != 0)
+    GList *modules = g_list_last(dev->iop);
+    if(modules)
     {
-      priorities_ok = 0;
-      fprintf(stderr, "[dt_iop_priorities_check_priorities] gamma is not the last iop, last is %s %s (%s)\n",
-              mod->op, mod->multi_name, msg);
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+      if(strcmp(mod->op, "gamma") != 0)
+      {
+        priorities_ok = 0;
+        fprintf(stderr, "[dt_iop_priorities_check_priorities] gamma is not the last iop, last is %s %s (%s)\n",
+                mod->op, mod->multi_name, msg);
+      }
+    }
+    else
+    {
+      // fprintf(stderr, "[dt_iop_priorities_check_priorities] dev->iop is empty (%s)\n", msg);
     }
   }
-  else
+
+  // check if there's duplicate or out-of-order iop_order
   {
-    // fprintf(stderr, "[dt_iop_priorities_check_priorities] dev->iop is empty (%s)\n", msg);
+    dt_iop_module_t *mod_prev = NULL;
+    GList *modules = g_list_first(dev->iop);
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+      if(mod_prev)
+      {
+        if(mod->iop_order < mod_prev->iop_order)
+        {
+          priorities_ok = 0;
+          fprintf(stderr, "[dt_iop_priorities_check_priorities] module %s %s(%f) should be after %s %s(%f) (%s)\n",
+                  mod->op, mod->multi_name, mod->iop_order, mod_prev->op, mod_prev->multi_name,
+                  mod_prev->iop_order, msg);
+        }
+        else if(mod->iop_order == mod_prev->iop_order)
+        {
+          priorities_ok = 0;
+          fprintf(stderr,
+                  "[dt_iop_priorities_check_priorities] module %s %s(%f) and %s %s(%f) has the same order (%s)\n",
+                  mod->op, mod->multi_name, mod->iop_order, mod_prev->op, mod_prev->multi_name,
+                  mod_prev->iop_order, msg);
+        }
+      }
+
+      mod_prev = mod;
+      modules = g_list_next(modules);
+    }
   }
+
+  _check_rules(dev, msg);
 
   return priorities_ok;
 }

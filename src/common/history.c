@@ -796,7 +796,7 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_module_t
       dt_iop_module_t *last_instance = dt_iop_priorities_get_last_instance(dev_dest, mod_src);
       if(last_instance)
       {
-        if(!dt_move_iop_after(module, last_instance, 1, 1))
+        if(!dt_move_iop_after(dev_dest, module, last_instance, 1, 1))
         {
           fprintf(stderr, "[dt_history_copy_and_paste_on_image_merge] can't module module %s %s after %s %s\n",
                   module->op, module->multi_name, last_instance->op, last_instance->multi_name);

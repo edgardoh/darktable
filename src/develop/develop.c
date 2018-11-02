@@ -1587,7 +1587,7 @@ dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, dt_iop_module_t *bas
   // we insert this module into dev->iop
   base->dev->iop = g_list_insert_sorted(base->dev->iop, module, dt_sort_iop_by_order);
   // always place the new instance after the base one
-  if(!dt_move_iop_after(module, base, 0, 1))
+  if(!dt_move_iop_after(base->dev, module, base, 0, 1))
   {
     fprintf(stderr, "[dt_dev_module_duplicate] can't move new instance after the base one\n");
   }
@@ -1719,9 +1719,10 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   dt_iop_module_t *mod_prev = dt_iop_gui_get_previous_visible_module(module);
   dt_iop_module_t *mod_next = dt_iop_gui_get_next_visible_module(module);
 
-  const float iop_order_next = (mod_next) ? dt_get_iop_order_after_iop(module, mod_next, 1, 0) : module->iop_order;
+  const float iop_order_next
+      = (mod_next) ? dt_get_iop_order_after_iop(dev, module, mod_next, 1, 0) : module->iop_order;
   const float iop_order_prev
-      = (mod_prev) ? dt_get_iop_order_before_iop(module, mod_prev, 1, 0) : module->iop_order;
+      = (mod_prev) ? dt_get_iop_order_before_iop(dev, module, mod_prev, 1, 0) : module->iop_order;
 
   module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
   module->multi_show_close = (nb_instances > 1);
