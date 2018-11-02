@@ -1719,19 +1719,17 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   dt_iop_module_t *mod_prev = dt_iop_gui_get_previous_visible_module(module);
   dt_iop_module_t *mod_next = dt_iop_gui_get_next_visible_module(module);
 
-  const float iop_order_next
-      = (mod_next) ? dt_get_iop_order_after_iop(dev, module, mod_next, 1, 0) : module->iop_order;
-  const float iop_order_prev
-      = (mod_prev) ? dt_get_iop_order_before_iop(dev, module, mod_prev, 1, 0) : module->iop_order;
+  const float iop_order_next = (mod_next) ? dt_get_iop_order_after_iop(dev, module, mod_next, 1, 0) : -1.f;
+  const float iop_order_prev = (mod_prev) ? dt_get_iop_order_before_iop(dev, module, mod_prev, 1, 0) : -1.f;
 
   module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
   module->multi_show_close = (nb_instances > 1);
   if(mod_next)
-    module->multi_show_up = (module->iop_order != iop_order_next);
+    module->multi_show_up = (iop_order_next >= 0.f);
   else
     module->multi_show_up = 0;
   if(mod_prev)
-    module->multi_show_down = (module->iop_order != iop_order_prev);
+    module->multi_show_down = (iop_order_prev >= 0.f);
   else
     module->multi_show_down = 0;
 }
@@ -2673,7 +2671,10 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
 {
   if(!dev->iop) return;
 
-  dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image begin");
+  dt_times_t start;
+  dt_get_times(&start);
+
+  // dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image begin");
 
   sqlite3_stmt *stmt;
 
@@ -2818,7 +2819,7 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
   // sort the modules, as the iop_order may changed
   dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
 
-  dt_iop_priorities_check_priorities(dev, "dt_dev_read_history end");
+  // dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image before read pipe");
 
   // check if there are no changes in priorities since history was last saved
   if(dev->history != NULL) dt_iop_priorities_read_pipe(dev, imgid);
@@ -2832,6 +2833,10 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
   }
 
   sqlite3_finalize(stmt);
+
+  dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image end");
+
+  dt_show_times(&start, "[dt_dev_read_history_no_image] read history", NULL);
 }
 
 void dt_dev_read_history(dt_develop_t *dev)
