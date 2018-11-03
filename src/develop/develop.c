@@ -64,6 +64,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_pthread_mutex_init(&dev->history_mutex, NULL);
   dev->history_end = 0;
   dev->history = NULL; // empty list
+  dev->main_pipe_list = NULL;
 
   dev->gui_attached = gui_attached;
   dev->width = -1;
@@ -150,6 +151,11 @@ void dt_dev_cleanup(dt_develop_t *dev)
   {
     dt_dev_free_history_item(((dt_dev_history_item_t *)dev->history->data));
     dev->history = g_list_delete_link(dev->history, dev->history);
+  }
+  if(dev->main_pipe_list)
+  {
+    g_list_free_full(dev->main_pipe_list, free);
+    dev->main_pipe_list = NULL;
   }
   while(dev->iop)
   {
@@ -2403,7 +2409,10 @@ void dt_dev_pop_history_items_no_image(dt_develop_t *dev, int32_t cnt, const int
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
     memcpy(module->params, module->default_params, module->params_size);
     memcpy(module->blend_params, module->default_blendop_params, sizeof(dt_develop_blend_params_t));
-    module->iop_order = (float)module->priority;
+    if(module->multi_priority == 0)
+      module->iop_order = (float)module->priority;
+    else
+      module->iop_order = FLT_MAX;
     module->enabled = module->default_enabled;
     modules = g_list_next(modules);
   }
@@ -2433,6 +2442,7 @@ void dt_dev_pop_history_items_no_image(dt_develop_t *dev, int32_t cnt, const int
     }
   }
   dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
+  dt_iop_priorities_relocate_non_history_modules(dev);
 
   dt_iop_priorities_check_priorities(dev, "dt_dev_pop_history_items_no_image end");
 }
@@ -2447,6 +2457,10 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   GList *dev_iop = g_list_copy(dev->iop);
 
   dt_dev_pop_history_items_no_image(dev, cnt, TRUE);
+
+  dt_iop_priorities_relocate_non_history_modules(dev);
+
+  dt_iop_priorities_check_priorities(dev, "dt_dev_pop_history_items end");
 
   // check if the order of modules has changed
   int dev_iop_changed = (g_list_length(dev_iop) != g_list_length(dev->iop));
@@ -2542,7 +2556,7 @@ int dt_dev_write_history_item(const dt_image_t *image, dt_dev_history_item_t *h,
 
 void dt_dev_write_history_no_image(dt_develop_t *dev, const int imgid)
 {
-  dt_iop_priorities_check_priorities(dev, "dt_dev_write_history begin");
+  dt_iop_priorities_check_priorities(dev, "dt_dev_write_history_no_image begin");
 
   sqlite3_stmt *stmt;
 
@@ -2568,7 +2582,7 @@ void dt_dev_write_history_no_image(dt_develop_t *dev, const int imgid)
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  dt_iop_priorities_check_priorities(dev, "dt_dev_write_history end");
+  dt_iop_priorities_check_priorities(dev, "dt_dev_write_history_no_image end");
 
   dt_iop_priorities_write_pipe(dev, imgid);
 
@@ -2677,6 +2691,17 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
 
   // dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image begin");
 
+  // flag all multi-instances as not used
+  {
+    GList *modules = g_list_first(dev->iop);
+    while(modules)
+    {
+      dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
+      if(module->multi_priority != 0) module->iop_order = FLT_MAX;
+      modules = g_list_next(modules);
+    }
+  }
+
   sqlite3_stmt *stmt;
 
   int history_end_current = 0;
@@ -2748,8 +2773,8 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
       dt_iop_module_t *new_module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
       if(!dt_iop_load_module(new_module, find_op->so, dev))
       {
-        new_module->iop_order = iop_order;
         new_module->multi_priority = multi_priority;
+        if(new_module->multi_priority != 0) new_module->iop_order = FLT_MAX;
 
         snprintf(new_module->multi_name, sizeof(new_module->multi_name), "%s", multi_name);
 
@@ -2820,11 +2845,6 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
   // sort the modules, as the iop_order may changed
   dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
 
-  // dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image before read pipe");
-
-  // check if there are no changes in priorities since history was last saved
-  if(dev->history != NULL) dt_iop_priorities_read_pipe(dev, imgid);
-
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT history_end FROM main.images WHERE id = ?1",
                               -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
@@ -2834,6 +2854,25 @@ void dt_dev_read_history_no_image(dt_develop_t *dev, const int imgid)
   }
 
   sqlite3_finalize(stmt);
+  /*
+    {
+      GList *modules = g_list_first(dev->iop);
+      while(modules)
+      {
+        dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+
+        printf("[dt_dev_read_history_no_image] %s %s(%f)\n", mod->op, mod->multi_name, mod->iop_order);
+
+        modules = g_list_next(modules);
+      }
+    }
+  */
+  // dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image before read pipe");
+
+  // check if there are no changes in priorities since history was last saved
+  dt_iop_priorities_read_pipe(dev, imgid);
+  // and change the iop_order of non-history modules
+  dt_iop_priorities_relocate_non_history_modules(dev);
 
   dt_iop_priorities_check_priorities(dev, "dt_dev_read_history_no_image end");
 
@@ -2864,7 +2903,7 @@ void dt_dev_read_history(dt_develop_t *dev)
 // set the module list order
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
-  printf("[dt_dev_reorder_gui_module_list] reordering module list\n");
+  // printf("[dt_dev_reorder_gui_module_list] reordering module list\n");
 
   int pos_module = 0;
   GList *modules = g_list_last(dev->iop);

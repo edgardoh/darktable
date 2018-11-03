@@ -582,17 +582,46 @@ static void dt_iop_gui_delete_callback(GtkButton *button, dt_iop_module_t *modul
   // if module was priority 0, then we set next to priority 0
   if(is_zero)
   {
-    // we set priority of next to 0
-    next->multi_priority = 0;
-
-    // we change this in the history stack too
-    GList *history = g_list_first(module->dev->history);
+    // we want the first one in history
+    dt_iop_module_t *first = NULL;
+    GList *history = g_list_first(dev->history);
     while(history)
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-      if(hist->module == next) hist->multi_priority = 0;
+      if(hist->module->instance == module->instance && hist->module != module)
+      {
+        first = hist->module;
+        break;
+      }
       history = g_list_next(history);
     }
+    if(first == NULL) first = next;
+
+    // we set priority of next to 0
+    first->multi_priority = 0;
+
+    // we change this in the history stack too
+    history = g_list_first(dev->history);
+    while(history)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+      if(hist->module == first) hist->multi_priority = 0;
+      history = g_list_next(history);
+    }
+
+    /*
+        // we set priority of next to 0
+        next->multi_priority = 0;
+
+        // we change this in the history stack too
+        GList *history = g_list_first(module->dev->history);
+        while(history)
+        {
+          dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+          if(hist->module == next) hist->multi_priority = 0;
+          history = g_list_next(history);
+        }
+    */
   }
 
   // we remove all references in the history stack and dev->iop
@@ -953,11 +982,11 @@ static void dt_iop_gui_movedown_callback(GtkButton *button, dt_iop_module_t *mod
 
   // we need to place this module right before the previous
   dt_iop_module_t *prev = dt_iop_gui_get_previous_visible_module(module);
-  dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 1");
+  // dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 1");
   if(!prev) return;
 
   const int moved = dt_move_iop_before(module->dev, module, prev, 1, 1);
-  dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 2");
+  // dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_movedown_callback 2");
   if(!moved) return;
 
   // we move the headers
@@ -988,6 +1017,8 @@ static void dt_iop_gui_movedown_callback(GtkButton *button, dt_iop_module_t *mod
 
 static void dt_iop_gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
 {
+  dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_moveup_callback begin");
+
   // we need to place this module right after the next one
   dt_iop_module_t *next = dt_iop_gui_get_next_visible_module(module);
   if(!next) return;
@@ -1009,6 +1040,8 @@ static void dt_iop_gui_moveup_callback(GtkButton *button, dt_iop_module_t *modul
   dt_dev_modules_update_multishow(next->dev);
 
   dt_dev_add_history_item(next->dev, module, TRUE);
+
+  dt_iop_priorities_check_priorities(module->dev, "dt_iop_gui_moveup_callback end");
 
   // we rebuild the pipe
   next->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;

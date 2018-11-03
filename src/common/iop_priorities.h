@@ -86,6 +86,7 @@ dt_iop_module_t *dt_iop_priorities_get_last_instance(dt_develop_t *dev, dt_iop_m
 
 void dt_iop_priorities_read_pipe(dt_develop_t *dev, const int imgid);
 void dt_iop_priorities_write_pipe(dt_develop_t *dev, const int imgid);
+void dt_iop_priorities_relocate_non_history_modules(dt_develop_t *dev);
 
 /** transform image from cst_from to cst_to */
 void dt_iop_transform_image_colorspace(struct dt_iop_module_t *self, float *image, const int width,
