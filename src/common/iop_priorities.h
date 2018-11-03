@@ -36,12 +36,13 @@ typedef struct dt_iop_priority_entry_t
   char operation[20];
 } dt_iop_priority_entry_t;
 
-typedef struct _former_iop_priorities_t
+typedef struct dt_iop_pipe_entry_t
 {
+  char operation[20];
   int priority;
   int multi_priority;
-  char operation[20];
-} _former_iop_priorities_t;
+  float iop_order;
+} dt_iop_pipe_entry_t;
 
 typedef struct dt_iop_priority_rule_t
 {

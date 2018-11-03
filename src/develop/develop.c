@@ -2403,6 +2403,7 @@ void dt_dev_pop_history_items_no_image(dt_develop_t *dev, int32_t cnt, const int
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
     memcpy(module->params, module->default_params, module->params_size);
     memcpy(module->blend_params, module->default_blendop_params, sizeof(dt_develop_blend_params_t));
+    module->iop_order = (float)module->priority;
     module->enabled = module->default_enabled;
     modules = g_list_next(modules);
   }
