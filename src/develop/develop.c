@@ -167,7 +167,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   free(dev->histogram_pre_tonecurve);
   free(dev->histogram_pre_levels);
 
-  g_list_free(dev->forms);
+  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
   g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
 
   g_list_free_full(dev->proxy.exposure, g_free);
@@ -505,8 +505,6 @@ void dt_dev_load_image(dt_develop_t *dev, const uint32_t imgid)
 
   dev->iop = dt_iop_load_modules(dev);
 
-  dt_masks_read_forms(dev);
-
   dt_dev_read_history(dev);
 
   dev->first_load = 0;
@@ -567,10 +565,21 @@ int dt_dev_write_history_item(const int imgid, dt_dev_history_item_t *h, int32_t
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+  
+  // write masks (if any)
+  GList *forms = g_list_first(h->forms);
+  while(forms)
+  {
+    dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
+    if (form)
+      dt_masks_write_masks_history_item(imgid, num, form);
+    forms = g_list_next(forms);
+  }
+  
   return 0;
 }
 
-void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean no_image)
+static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, const int no_image, const int include_masks)
 {
     GList *history = g_list_nth(dev->history, dev->history_end);
     while(history)
@@ -591,6 +600,7 @@ void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gbo
        || ((dev->focus_hash != hist->focus_hash)                 // or if focused out and in
        && (// but only add item if there is a difference at all for the same module
          (module->params_size != hist->module->params_size) ||
+         include_masks || 
          (module->params_size == hist->module->params_size && memcmp(hist->params, module->params, module->params_size)))))
     {
       // new operation, push new item
@@ -624,6 +634,10 @@ void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gbo
       hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
       memcpy(hist->params, module->params, module->params_size);
       memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
+      if(include_masks)
+        hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+      else
+        hist->forms = NULL;
 
       dev->history = g_list_append(dev->history, hist);
       if(!no_image)
@@ -659,12 +673,23 @@ void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gbo
       hist->multi_priority = module->multi_priority;
       memcpy(hist->multi_name, module->multi_name, sizeof(module->multi_name));
       hist->enabled = module->enabled;
+
+      if(include_masks)
+      {
+        g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+        hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+      }
       if(!no_image)
       {
         dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
         dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
       }
     }
+}
+
+void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, const int no_image)
+{
+  _dev_add_history_item_ext(dev, module, enable, no_image, FALSE);
 }
 
 void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
@@ -674,7 +699,7 @@ void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolea
 
   if(dev->gui_attached)
   {
-    dt_dev_add_history_item_ext(dev, module, enable, FALSE);
+    _dev_add_history_item_ext(dev, module, enable, FALSE, FALSE);
   }
 #if 0
   {
@@ -706,11 +731,83 @@ void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolea
   }
 }
 
+void dev_add_masks_history_item_ext(dt_develop_t *dev, dt_iop_module_t *_module, gboolean _enable, gboolean no_image)
+{
+  dt_iop_module_t *module = _module;
+  gboolean enable = _enable;
+  
+  // no module means that is called from the mask manager, so find the iop
+  if(module == NULL)
+  {
+    GList *modules = g_list_first(dev->iop);
+    while(modules)
+    {
+      dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
+      if(strcmp(mod->op, "mask_manager") == 0)
+      {
+        module = mod;
+        break;
+      }
+      modules = g_list_next(modules);
+    }
+    enable = FALSE;
+  }
+  if(module)
+  {
+    _dev_add_history_item_ext(dev, module, enable, no_image, TRUE);
+  }
+  else
+    fprintf(stderr, "[dev_dev_add_masks_history_item] can't find mask manager module\n");
+}
+
+void dev_add_masks_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+{
+  if(!darktable.gui || darktable.gui->reset) return;
+  dt_pthread_mutex_lock(&dev->history_mutex);
+
+  if(dev->gui_attached)
+  {
+    dev_add_masks_history_item_ext(dev, module, enable, FALSE);
+  }
+#if 0
+  {
+    // debug:
+    printf("remaining %d history items:\n", dev->history_end);
+    GList *history = dev->history;
+    int i = 0;
+    while(history)
+    {
+      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+      printf("%d %s\n", i, hist->module->op);
+      history = g_list_next(history);
+      i++;
+    }
+  }
+#endif
+
+  // invalidate buffers and force redraw of darkroom
+  dt_dev_invalidate_all(dev);
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+
+  if(dev->gui_attached)
+  {
+    /* signal that history has changed */
+    dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+
+    /* recreate mask list */
+    dt_dev_masks_list_change(dev);
+
+    /* redraw */
+    dt_control_queue_redraw_center();
+  }
+}
+
 void dt_dev_free_history_item(gpointer data)
 {
   dt_dev_history_item_t *item = (dt_dev_history_item_t *)data;
   free(item->params);
   free(item->blend_params);
+  g_list_free_full(item->forms, (void (*)(void *))dt_masks_free_form);
   free(item);
 }
 
@@ -806,7 +903,9 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
 void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
 {
   // printf("dev popping all history items >= %d\n", cnt);
+  const int end_prev = dev->history_end;
   dev->history_end = cnt;
+  
   // reset gui params for all modules
   GList *modules = dev->iop;
   while(modules)
@@ -818,7 +917,9 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
     module->multi_name[0] = '\0';
     modules = g_list_next(modules);
   }
+  
   // go through history and set gui params
+  GList *forms = NULL;
   GList *history = dev->history;
   for(int i = 0; i < cnt && history; i++)
   {
@@ -828,9 +929,30 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
 
     hist->module->enabled = hist->enabled;
     snprintf(hist->module->multi_name, sizeof(hist->module->multi_name), "%s", hist->multi_name);
+    if(hist->forms) forms = hist->forms;
 
     history = g_list_next(history);
   }
+  
+  // check if masks have changed
+  int masks_changed = 0;
+  if(cnt < end_prev)
+    history = g_list_nth(dev->history, cnt);
+  else if(cnt > end_prev)
+    history = g_list_nth(dev->history, end_prev);
+  else
+    history = NULL;
+  for(int i = MIN(cnt, end_prev); i < MAX(cnt, end_prev) && history && !masks_changed; i++)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
+
+    if(hist->forms != NULL)
+      masks_changed = 1;
+
+    history = g_list_next(history);
+  }
+  if(masks_changed)
+    dt_masks_replace_current_forms(dev, forms);
 }
 
 void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
@@ -853,6 +975,9 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   darktable.gui->reset = 0;
   dt_dev_invalidate_all(dev);
   dt_pthread_mutex_unlock(&dev->history_mutex);
+  
+  dt_dev_masks_list_change(dev);
+  
   dt_control_queue_redraw_center();
 }
 
@@ -864,6 +989,11 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int imgid)
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                              &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.id);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
   GList *history = dev->history;
@@ -1072,7 +1202,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
     // db record:
     // 0-img, 1-num, 2-module_instance, 3-operation char, 4-params blob, 5-enabled, 6-blend_params,
     // 7-blendop_version, 8 multi_priority, 9 multi_name
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)malloc(sizeof(dt_dev_history_item_t));
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
     hist->enabled = sqlite3_column_int(stmt, 5);
 
     const char *opname = (const char *)sqlite3_column_text(stmt, 3);
@@ -1142,6 +1272,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
       continue;
     }
 
+    hist->num = sqlite3_column_int(stmt, 1);
     int modversion = sqlite3_column_int(stmt, 2);
     assert(strcmp((char *)sqlite3_column_text(stmt, 3), hist->module->op) == 0);
     hist->params = malloc(hist->module->params_size);
@@ -1240,6 +1371,8 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
       dev->history_end = sqlite3_column_int(stmt, 0);
   }
 
+  dt_masks_read_masks_history(dev, imgid);
+  
   if(dev->gui_attached && !no_image)
   {
     dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -1249,6 +1382,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
     /* signal history changed */
     dt_control_signal_raise(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
+  dt_dev_masks_list_change(dev);
   sqlite3_finalize(stmt);
 }
 

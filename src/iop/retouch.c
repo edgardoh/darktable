@@ -663,11 +663,7 @@ static void rt_masks_form_change_opacity(dt_iop_module_t *self, int formid, floa
   {
     grpt->opacity = opacity;
 
-    dt_develop_blend_params_t *bp = self->blend_params;
-    dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-    dt_masks_write_form(grp, darktable.develop);
-
-    dt_dev_masks_list_update(darktable.develop);
+    dev_add_masks_history_item(darktable.develop, self, TRUE);
   }
 }
 
@@ -755,7 +751,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   }
 
   // else, we create a new from group with the shapes and display it
-  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp = dt_masks_create_ext(DT_MASKS_GROUP);
   for(int i = 0; i < RETOUCH_NO_FORMS; i++)
   {
     if(p->rt_forms[i].scale == scale)
@@ -775,7 +771,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     }
   }
 
-  dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+  dt_masks_form_t *grp2 = dt_masks_create_ext(DT_MASKS_GROUP);
   grp2->formid = 0;
   dt_masks_group_ungroup(grp2, grp);
   dt_masks_change_form_gui(grp2);

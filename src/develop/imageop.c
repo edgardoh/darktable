@@ -861,8 +861,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
   // and we refresh the pipe
   dt_iop_request_focus(module);
 
-  dt_dev_masks_list_change(module->dev);
-
   if(module->dev->gui_attached)
   {
     module->dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
@@ -1624,7 +1622,6 @@ static void dt_iop_gui_reset_callback(GtkButton *button, dt_iop_module_t *module
   {
     dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
     if(grp) dt_masks_form_remove(module, NULL, grp);
-    dt_dev_masks_list_change(module->dev);
   }
   /* reset to default params */
   memcpy(module->params, module->default_params, module->params_size);

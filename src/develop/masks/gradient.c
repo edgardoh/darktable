@@ -102,7 +102,7 @@ static int dt_gradient_events_mouse_scrolled(struct dt_iop_module_t *module, flo
         gradient->compression = fmaxf(gradient->compression, 0.001f) * 0.8f;
       else
         gradient->compression = fminf(fmaxf(gradient->compression, 0.001f) * 1.0f / 0.8f, 1.0f);
-      dt_masks_write_form(form, darktable.develop);
+      dev_add_masks_history_item(darktable.develop, module, TRUE);
       dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index);
       dt_conf_set_float("plugins/darkroom/masks/gradient/compression", gradient->compression);
@@ -220,7 +220,6 @@ static int dt_gradient_events_button_released(struct dt_iop_module_t *module, fl
     }
 
     // we remove the shape
-    dt_dev_masks_list_remove(darktable.develop, form->formid, parentid);
     dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
     return 1;
   }
@@ -241,7 +240,7 @@ static int dt_gradient_events_button_released(struct dt_iop_module_t *module, fl
 
     gradient->anchor[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
     gradient->anchor[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
@@ -275,7 +274,7 @@ static int dt_gradient_events_button_released(struct dt_iop_module_t *module, fl
     float dv = atan2(y - yref, x - xref) - atan2(-gui->dy, -gui->dx);
 
     gradient->rotation -= dv / M_PI * 180.0f;
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);

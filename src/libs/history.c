@@ -23,6 +23,7 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/masks.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
 #include "gui/styles.h"
@@ -236,6 +237,8 @@ static GList *_duplicate_history(GList *hist)
 
     memcpy(new->params, old->params, params_size);
     memcpy(new->blend_params, old->blend_params, sizeof(dt_develop_blend_params_t));
+    
+    if(old->forms) new->forms = dt_masks_dup_forms_deep(old->forms, NULL);
 
     result = g_list_append(result, new);
 
@@ -706,7 +709,7 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
       label = g_strdup_printf("%s %s", hitem->module->name(), hitem->multi_name);
 
     gboolean selected = (num == darktable.develop->history_end - 1);
-    GtkWidget *widget = _lib_history_create_button(self, num, label, hitem->enabled, selected);
+    GtkWidget *widget = _lib_history_create_button(self, num, label, hitem->enabled || (!strcmp(hitem->op_name, "mask_manager")), selected);
     g_free(label);
 
     gtk_box_pack_start(GTK_BOX(d->history_box), widget, TRUE, TRUE, 0);
@@ -740,6 +743,70 @@ static void _lib_history_compress_clicked_callback(GtkWidget *widget, gpointer u
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
+  // delete all mask_manager entries
+  int masks_count = 0;
+  char op_mask_manager[20] = {0};
+  g_strlcpy(op_mask_manager, "mask_manager", sizeof(op_mask_manager));
+  
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1 AND operation = ?2", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op_mask_manager, -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // compress masks history
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1 AND num "
+                                                             "NOT IN (SELECT MAX(num) FROM main.masks_history WHERE "
+                                                             "imgid = ?1 AND num < ?2)", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, darktable.develop->history_end);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // if there's masks create a mask manage entry
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT COUNT(*) FROM main.masks_history WHERE imgid = ?1",
+                              -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW) masks_count = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  
+  if(masks_count > 0)
+  {
+    // set the masks history as first entry
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE main.masks_history SET num = 0 WHERE imgid = ?1", -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    // make room for mask manager history entry
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE main.history SET num=num+1 WHERE imgid = ?1", 
+        -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    // update history end
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "UPDATE main.images SET history_end = history_end+1 WHERE id = ?1", 
+        -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    // create a mask manager entry in history as first entry
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "INSERT INTO main.history (imgid, num, operation, op_params, module, enabled, "
+             "blendop_params, blendop_version, multi_priority, multi_name) "
+        "VALUES(?1, 0, ?2, NULL, 1, 0, NULL, 0, 0, '')",
+        -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op_mask_manager, -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+  }
+  
   // load new history and write it back to ensure that all history are properly numbered without a gap
   dt_dev_reload_history_items(darktable.develop);
   dt_dev_write_history(darktable.develop);

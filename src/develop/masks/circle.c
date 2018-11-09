@@ -176,7 +176,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
           circle->border *= 1.0f / 0.97f;
         else
           return 1;
-        dt_masks_write_form(form, darktable.develop);
+        dev_add_masks_history_item(darktable.develop, module, TRUE);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
         if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
@@ -192,7 +192,7 @@ static int dt_circle_events_mouse_scrolled(struct dt_iop_module_t *module, float
           circle->radius *= 1.0f / 0.97f;
         else
           return 1;
-        dt_masks_write_form(form, darktable.develop);
+        dev_add_masks_history_item(darktable.develop, module, TRUE);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
         if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
@@ -389,7 +389,6 @@ static int dt_circle_events_button_released(struct dt_iop_module_t *module, floa
     }
 
     // we remove the shape
-    dt_dev_masks_list_remove(darktable.develop, form->formid, parentid);
     dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
     return 1;
   }
@@ -408,7 +407,7 @@ static int dt_circle_events_button_released(struct dt_iop_module_t *module, floa
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     circle->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
     circle->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
@@ -447,7 +446,7 @@ static int dt_circle_events_button_released(struct dt_iop_module_t *module, floa
       form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
       form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
     }
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);

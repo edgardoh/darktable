@@ -514,7 +514,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
           ellipse->rotation += 10.f;
         ellipse->rotation = fmodf(ellipse->rotation, 360.0f);
 
-        dt_masks_write_form(form, darktable.develop);
+        dev_add_masks_history_item(darktable.develop, module, TRUE);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
         if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
@@ -532,7 +532,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
           ellipse->border *= 1.0f/0.97f;
         else return 1;
         ellipse->border = CLAMP(ellipse->border, 0.001f * reference, reference);
-        dt_masks_write_form(form, darktable.develop);
+        dev_add_masks_history_item(darktable.develop, module, TRUE);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
         if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
@@ -555,7 +555,7 @@ static int dt_ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, floa
         const float factor = ellipse->radius[0] / oldradius;
         ellipse->radius[1] *= factor;
 
-        dt_masks_write_form(form, darktable.develop);
+        dev_add_masks_history_item(darktable.develop, module, TRUE);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index);
         if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
@@ -796,7 +796,6 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
     }
 
     // we remove the shape
-    dt_dev_masks_list_remove(darktable.develop, form->formid, parentid);
     dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
     return 1;
   }
@@ -815,7 +814,7 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     ellipse->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
     ellipse->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
@@ -871,7 +870,7 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
       dt_conf_set_float("plugins/darkroom/masks/ellipse/border", ellipse->border);
     }
 
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
@@ -911,7 +910,7 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
     else
       dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
 
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
@@ -966,7 +965,7 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
         dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
     }
 
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index);
@@ -996,7 +995,7 @@ static int dt_ellipse_events_button_released(struct dt_iop_module_t *module, flo
       form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
       form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
     }
-    dt_masks_write_form(form, darktable.develop);
+    dev_add_masks_history_item(darktable.develop, module, TRUE);
 
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);

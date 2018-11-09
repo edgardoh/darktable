@@ -345,7 +345,7 @@ void dt_history_delete_on_image(int32_t imgid)
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.mask WHERE imgid = ?1", -1, &stmt,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1, &stmt,
                               NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
@@ -688,8 +688,36 @@ static int _get_new_iop_multi_priority(dt_develop_t *dev, const char *op_name)
   return (multi_priority_new + 1);
 }
 
-static int _history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_module_t *mod_src, GList **_modules_used,
-                                         const int append)
+// fills used with formid, if it is a group it recurs and fill all sub-forms
+static void _fill_used_forms(GList *forms_list, int formid, int *used, int nb)
+{
+  // first, we search for the formid in used table
+  for(int i = 0; i < nb; i++)
+  {
+    if(used[i] == 0)
+    {
+      // we store the formid
+      used[i] = formid;
+      break;
+    }
+    if(used[i] == formid) break;
+  }
+
+  // if the form is a group, we iterate through the sub-forms
+  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms_list, formid);
+  if(form && (form->type & DT_MASKS_GROUP))
+  {
+    GList *grpts = g_list_first(form->points);
+    while(grpts)
+    {
+      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)grpts->data;
+      _fill_used_forms(forms_list, grpt->formid, used, nb);
+      grpts = g_list_next(grpts);
+    }
+  }
+}
+
+static int _history_merge_module_into_history(dt_develop_t *dev_src, dt_develop_t *dev_dest, dt_iop_module_t *mod_src, GList **_modules_used)
 {
   int module_added = 1;
   GList *modules_used = *_modules_used;
@@ -713,7 +741,7 @@ static int _history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_mod
     }
   }
 
-  if(module_added && !append)
+  if(module_added)
   {
     // we haven't found a module to replace
     if(mod_replace == NULL)
@@ -813,7 +841,46 @@ static int _history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_mod
   // and we add it to history
   if(module_added)
   {
-    dt_dev_add_history_item_ext(dev_dest, module, FALSE, TRUE);
+    // we will copy only used forms
+    guint nbf = g_list_length(dev_src->forms);
+    int *forms_used_replace = NULL;
+
+    // record the masks used by this module
+    if(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING && mod_src->blend_params->mask_id > 0)
+    {
+      forms_used_replace = calloc(nbf, sizeof(int));
+      
+      _fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
+
+      // now copy masks
+      for(int i = 0; i < nbf && forms_used_replace[i] > 0; i++)
+      {
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(dev_src->forms, forms_used_replace[i]);
+        if(form)
+        {
+          // check if the form already exists in dest image
+          // if so we'll remove it, so it is replaced 
+          dt_masks_form_t *form_dest = dt_masks_get_from_id_ext(dev_dest->forms, forms_used_replace[i]);
+          if(form_dest)
+          {
+            dev_dest->forms = g_list_remove(dev_dest->forms, form_dest);
+            // and add it to allforms to cleanup
+            dev_dest->allforms = g_list_append(dev_dest->allforms, form_dest);
+          }
+          
+          // and add it to dest image
+          dt_masks_form_t *form_new = dt_masks_dup_masks_form(form);
+          dev_dest->forms = g_list_append(dev_dest->forms, form_new);
+        }
+        else
+          fprintf(stderr, "[_history_copy_and_paste_on_image_merge] form %i not found in source image\n", forms_used_replace[i]);
+      }
+    }
+
+    if(nbf > 0 && forms_used_replace[0] > 0)
+      dev_add_masks_history_item_ext(dev_dest, module, FALSE, TRUE);
+    else
+      dt_dev_add_history_item_ext(dev_dest, module, FALSE, TRUE);
     dt_dev_pop_history_items_ext(dev_dest, dev_dest->history_end);
     
     // we have added the module, now we need to make it last on the pipe
@@ -851,40 +918,13 @@ static int _history_merge_module_into_history(dt_develop_t *dev_dest, dt_iop_mod
         modules_dest = g_list_next(modules_dest);
       }
     }
+    
+    if(forms_used_replace) free(forms_used_replace);
   }
 
   *_modules_used = modules_used;
 
   return module_added;
-}
-
-// fills used with formid, if it is a group it recurs and fill all sub-forms
-static void _fill_used_forms(GList *forms_list, int formid, int *used, int nb)
-{
-  // first, we search for the formid in used table
-  for(int i = 0; i < nb; i++)
-  {
-    if(used[i] == 0)
-    {
-      // we store the formid
-      used[i] = formid;
-      break;
-    }
-    if(used[i] == formid) break;
-  }
-
-  // if the form is a group, we iterate through the sub-forms
-  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms_list, formid);
-  if(form && (form->type & DT_MASKS_GROUP))
-  {
-    GList *grpts = g_list_first(form->points);
-    while(grpts)
-    {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)grpts->data;
-      _fill_used_forms(forms_list, grpt->formid, used, nb);
-      grpts = g_list_next(grpts);
-    }
-  }
 }
 
 static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops)
@@ -904,18 +944,11 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
   dev_src->iop = dt_iop_load_modules_ext(dev_src, TRUE);
   dev_dest->iop = dt_iop_load_modules_ext(dev_dest, TRUE);
 
-  dt_masks_read_forms_ext(dev_src, imgid, TRUE);
-  dt_masks_read_forms_ext(dev_dest, dest_imgid, TRUE);
-  
   dt_dev_read_history_ext(dev_src, imgid, TRUE);
   dt_dev_read_history_ext(dev_dest, dest_imgid, TRUE);
 
   dt_dev_pop_history_items_ext(dev_src, dev_src->history_end);
   dt_dev_pop_history_items_ext(dev_dest, dev_dest->history_end);
-
-  // we will copy only used forms
-  guint nbf = g_list_length(dev_src->forms);
-  int *forms_used_replace = calloc(nbf, sizeof(int));
 
   // the user have selected some history entries
   if(ops)
@@ -931,14 +964,7 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
       if(hist)
       {
         // merge the entry
-        _history_merge_module_into_history(dev_dest, hist->module, &modules_used, FALSE);
-        
-        // record the masks used by this module
-        if(hist->module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-        {
-          if(hist->module->blend_params->mask_id > 0)
-            _fill_used_forms(dev_src->forms, hist->module->blend_params->mask_id, forms_used_replace, nbf);
-        }
+        _history_merge_module_into_history(dev_src, dev_dest, hist->module, &modules_used);
       }
 
       l = g_list_previous(l);
@@ -956,52 +982,20 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
       if(_search_history_by_module(dev_src, mod_src) != NULL)
       {
         // merge the module into dest image
-        _history_merge_module_into_history(dev_dest, mod_src, &modules_used, FALSE);
-        
-        // record the masks used by this module
-        if(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-        {
-          if(mod_src->blend_params->mask_id > 0)
-            _fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
-        }
+        _history_merge_module_into_history(dev_src, dev_dest, mod_src, &modules_used);
       }
 
       modules_src = g_list_next(modules_src);
     }
   }
-
-  // now copy masks
-  for(int i = 0; i < nbf && forms_used_replace[i] > 0; i++)
-  {
-    dt_masks_form_t *form = dt_masks_get_from_id_ext(dev_src->forms, forms_used_replace[i]);
-    if(form)
-    {
-      // check if the form already exists in dest image
-      // if so we'll remove it, so it is replaced 
-      dt_masks_form_t *form_dest = dt_masks_get_from_id_ext(dev_dest->forms, forms_used_replace[i]);
-      if(form_dest)
-      {
-        dev_dest->forms = g_list_remove(dev_dest->forms, form_dest);
-      }
-      
-      // and add it to dest image
-      // we can do this because dev->allforms will take care of free() the form
-      // if that changes we'll have to duplicate the form
-      dev_dest->forms = g_list_append(dev_dest->forms, form);
-    }
-    else
-      fprintf(stderr, "[_history_copy_and_paste_on_image_merge] form %i not found in source image\n", forms_used_replace[i]);
-  }
-
+  
   // write history and forms to db
-  dt_masks_write_forms_ext(dev_dest, dest_imgid, FALSE);
   dt_dev_write_history_ext(dev_dest, dest_imgid);
 
   dt_dev_cleanup(dev_src);
   dt_dev_cleanup(dev_dest);
 
   g_list_free(modules_used);
-  free(forms_used_replace);
 
   return 0;
 }
@@ -1019,7 +1013,7 @@ static int _history_copy_and_paste_on_image_overwrite(int32_t imgid, int32_t des
   sqlite3_finalize(stmt);
 
   // and shapes
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.mask WHERE imgid = ?1", -1, &stmt,
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1, &stmt,
                               NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
   sqlite3_step(stmt);
@@ -1049,10 +1043,10 @@ static int _history_copy_and_paste_on_image_overwrite(int32_t imgid, int32_t des
     sqlite3_finalize(stmt);
     
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "INSERT INTO main.mask "
-                                "(imgid, formid, form, name, version, points, points_count, source) SELECT "
-                                "?1, formid, form, name, version, points, points_count, source "
-                                "FROM main.mask WHERE imgid = ?2",
+                                "INSERT INTO main.masks_history "
+                                "(imgid, num, formid, form, name, version, points, points_count, source) SELECT "
+                                "?1, num, formid, form, name, version, points, points_count, source "
+                                "FROM main.masks_history WHERE imgid = ?2",
                                 -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dest_imgid);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);

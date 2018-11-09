@@ -91,7 +91,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     for(int i = 0; i < o->num_spots; i++)
     {
       // we have to register a new circle mask
-      dt_masks_form_t *form = dt_masks_create(DT_MASKS_CIRCLE | DT_MASKS_CLONE);
+      dt_masks_form_t *form = dt_masks_create_ext(DT_MASKS_CIRCLE | DT_MASKS_CLONE);
 
       // spots v1 was before raw orientation changes
       form->version = 1;
@@ -182,7 +182,7 @@ static gboolean _add_path(GtkWidget *widget, GdkEventButton *e, dt_iop_module_t 
   // we want to be sure that the iop has focus
   dt_iop_request_focus(self);
   // we create the new form
-  dt_masks_form_t *form = dt_masks_create(DT_MASKS_PATH | DT_MASKS_CLONE);
+  dt_masks_form_t *form = dt_masks_create_ext(DT_MASKS_PATH | DT_MASKS_CLONE);
   dt_masks_change_form_gui(form);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = self;
@@ -196,7 +196,7 @@ static gboolean _add_circle(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   // we want to be sure that the iop has focus
   dt_iop_request_focus(self);
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_CIRCLE | DT_MASKS_CLONE);
+  dt_masks_form_t *spot = dt_masks_create_ext(DT_MASKS_CIRCLE | DT_MASKS_CLONE);
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = self;
@@ -210,7 +210,7 @@ static gboolean _add_ellipse(GtkWidget *widget, GdkEventButton *e, dt_iop_module
   // we want to be sure that the iop has focus
   dt_iop_request_focus(self);
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_ELLIPSE | DT_MASKS_CLONE);
+  dt_masks_form_t *spot = dt_masks_create_ext(DT_MASKS_ELLIPSE | DT_MASKS_CLONE);
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = self;

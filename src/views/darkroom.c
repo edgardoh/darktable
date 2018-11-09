@@ -568,9 +568,8 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   while(dev->history)
   {
     // clear history of old image
-    free(((dt_dev_history_item_t *)dev->history->data)->params);
-    free(((dt_dev_history_item_t *)dev->history->data)->blend_params);
-    free((dt_dev_history_item_t *)dev->history->data);
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(dev->history->data);
+    dt_dev_free_history_item(hist);
     dev->history = g_list_delete_link(dev->history, dev->history);
   }
 
@@ -630,10 +629,14 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
     free(dev->alliop->data);
     dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
   }
-  
+  // and masks
+  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
+  dev->forms = NULL;
+  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+  dev->allforms = NULL;
+
   dt_dev_pixelpipe_create_nodes(dev->pipe, dev);
   dt_dev_pixelpipe_create_nodes(dev->preview_pipe, dev);
-  dt_masks_read_forms(dev);
   dt_dev_read_history(dev);
 
   // we have to init all module instances other than "base" instance
@@ -1790,7 +1793,6 @@ void enter(dt_view_t *self)
     }
     g_free(active_plugin);
   }
-  dt_dev_masks_list_change(dev);
 
   // image should be there now.
   float zoom_x, zoom_y;
@@ -1877,11 +1879,7 @@ void leave(dt_view_t *self)
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(dev->history->data);
     // printf("removing history item %d - %s, data %f %f\n", hist->module->instance, hist->module->op, *(float
     // *)hist->params, *((float *)hist->params+1));
-    free(hist->params);
-    hist->params = NULL;
-    free(hist->blend_params);
-    hist->blend_params = NULL;
-    free(hist);
+    dt_dev_free_history_item(hist);
     dev->history = g_list_delete_link(dev->history, dev->history);
   }
 
@@ -1917,6 +1915,11 @@ void leave(dt_view_t *self)
     dev->form_gui = NULL;
     dt_masks_change_form_gui(NULL);
   }
+  // clear masks
+  g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
+  dev->forms = NULL;
+  g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+  dev->allforms = NULL;
 
   // take care of the overexposed window
   if(dev->overexposed.timeout > 0) g_source_remove(dev->overexposed.timeout);

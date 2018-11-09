@@ -538,6 +538,13 @@ void dt_styles_apply_to_image(const char *name, gboolean duplicate, int32_t imgi
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1 AND num >= (SELECT history_end "
+                                "FROM main.images WHERE id = imgid)", -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, newimgid);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
     /* in sqlite ROWID starts at 1, while our num column starts at 0 */
     int32_t offs = -1;
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),

@@ -510,8 +510,13 @@ def add_edges(gr):
   gr.add_edge(('colorbalance', 'vibrance'))
   gr.add_edge(('colorize', 'vibrance'))
 
+  # mask manager can go anywhere (non raw)
+  gr.add_edge(('mask_manager', 'demosaic'))
+  gr.add_edge(('colorin', 'mask_manager'))
+
 gr = digraph()
 gr.add_nodes([
+'mask_manager',
 'atrous',
 'ashift',
 'basecurve',
