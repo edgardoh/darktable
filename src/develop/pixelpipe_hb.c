@@ -22,6 +22,7 @@
 #include "common/histogram.h"
 #include "common/imageio.h"
 #include "common/opencl.h"
+#include "common/iop_priorities.h"
 #include "control/control.h"
 #include "control/signal.h"
 #include "develop/blend.h"
@@ -154,6 +155,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe, size_t size, int32_t 
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
   pipe->iop = NULL;
+  pipe->iop_priorities = NULL;
   pipe->forms = NULL;
 
   return 1;
@@ -229,6 +231,9 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     g_list_free(pipe->iop);
     pipe->iop = NULL;
   }
+  // and priorities
+  g_list_free_full(pipe->iop_priorities, free);
+  pipe->iop_priorities = NULL;
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
 
@@ -238,6 +243,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   pipe->shutdown = 0;
   g_assert(pipe->nodes == NULL);
   g_assert(pipe->iop == NULL);
+  g_assert(pipe->iop_priorities == NULL);
+  pipe->iop_priorities = dt_ioppr_priorities_copy_deep(dev->iop_priorities);
   // for all modules in dev:
   pipe->iop = g_list_copy(dev->iop);
   GList *modules = pipe->iop;
@@ -253,8 +260,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       piece->histogram_params.bins_count = 256;
       piece->histogram_stats.bins_count = 0;
       piece->histogram_stats.pixels = 0;
-      piece->colors
-          = ((dt_iop_module_colorspace(module) == iop_cs_RAW) && (pipe->image.flags & DT_IMAGE_RAW)) ? 1 : 4;
+      piece->colors = ((dt_ioppr_module_default_input_colorspace(pipe->iop_priorities, module->op) == iop_cs_RAW) && (pipe->image.flags & DT_IMAGE_RAW)) ? 1 : 4;
+//          = ((dt_iop_module_colorspace(module) == iop_cs_RAW) && (pipe->image.flags & DT_IMAGE_RAW)) ? 1 : 4;
       piece->iscale = pipe->iscale;
       piece->iwidth = pipe->iwidth;
       piece->iheight = pipe->iheight;
@@ -394,7 +401,8 @@ static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel, 
     histogram_params.roi = &histogram_roi;
   }
 
-  const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  //const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  const dt_iop_colorspace_type_t cst = dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, piece->module->op);
 
   dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, pixel, histogram);
   dt_histogram_max_helper(&piece->histogram_stats, cst, histogram, histogram_max);
@@ -441,7 +449,8 @@ static void histogram_collect_cl(int devid, dt_dev_pixelpipe_iop_t *piece, cl_me
     histogram_params.roi = &histogram_roi;
   }
 
-  const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  //const dt_iop_colorspace_type_t cst = dt_iop_module_colorspace(piece->module);
+  const dt_iop_colorspace_type_t cst = dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, piece->module->op);
 
   dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, pixel, histogram);
   dt_histogram_max_helper(&piece->histogram_stats, cst, histogram, histogram_max);
@@ -486,7 +495,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t *
 
   // transform back to current module coordinates
   dt_dev_distort_backtransform_plus(darktable.develop, darktable.develop->preview_pipe,
-                                    module->priority + (picker_source == PIXELPIPE_PICKER_INPUT ? 0 : 1), 99999,
+                                    module->iop_order, ((picker_source == PIXELPIPE_PICKER_INPUT) ? DT_DEV_TRANSFORM_DIR_FORW_INCL
+                                     : DT_DEV_TRANSFORM_DIR_FORW_EXCL),
                                     fbox, 2);
 
   fbox[0] -= roi->x;
@@ -970,6 +980,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // for now just transform to default input colorspace
+          if(success_opencl)
+          {
+            success_opencl = dt_iop_transform_image_colorspace_cl(
+                module, piece->pipe->devid, cl_mem_input, roi_in.width, roi_in.height, input_format->cst,
+                    dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op), &input_format->cst);
+          }
+
           /* now call process_cl of module; module should emit meaningful messages in case of error */
           if(success_opencl)
           {
@@ -977,6 +995,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                 = module->process_cl(module, piece, cl_mem_input, *cl_mem_output, &roi_in, roi_out);
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
+            
+            // and save the output colorspace
+            (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
           }
 
           if(pipe->shutdown)
@@ -1109,6 +1130,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // for now just transform to default input colorspace
+          if(success_opencl)
+          {
+            dt_iop_transform_image_colorspace(module, input, roi_in.width, roi_in.height, input_format->cst,
+                dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op), &input_format->cst);
+          }
+
           /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
           if(success_opencl)
           {
@@ -1116,6 +1144,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                 = module->process_tiling_cl(module, piece, input, *output, &roi_in, roi_out, in_bpp);
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU);
+            
+            // and save the output colorspace
+            (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
           }
 
           if(pipe->shutdown)
@@ -1315,6 +1346,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             return 1;
           }
 
+          // for now just transform to default input colorspace
+          dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height,
+              input_format->cst, dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op),
+              &input_format->cst);
+
           /* process module on cpu. use tiling if needed and possible. */
           if(piece->process_tiling_ready
              && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1331,6 +1367,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
             pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
             pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
           }
+
+          // and save the output colorspace
+          (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
 
           if(pipe->shutdown)
           {
@@ -1448,6 +1487,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           return 1;
         }
 
+        // for now just transform to default input colorspace
+        dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, input_format->cst,
+                                          dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op), &input_format->cst);
+
         /* process module on cpu. use tiling if needed and possible. */
         if(piece->process_tiling_ready
            && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1464,6 +1507,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
           pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
           pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
         }
+
+        // and save the output colorspace
+        (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
 
         if(pipe->shutdown)
         {
@@ -1546,6 +1592,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
         return 1;
       }
 
+      // for now just transform to default input colorspace
+      dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, input_format->cst,
+                                        dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op), &input_format->cst);
+
       /* process module on cpu. use tiling if needed and possible. */
       if(piece->process_tiling_ready
          && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1562,6 +1612,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
         pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
         pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
       }
+
+      // and save the output colorspace
+      (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
 
       if(pipe->shutdown)
       {
@@ -1631,6 +1684,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       return 1;
     }
 
+    // for now just transform to default input colorspace
+    dt_iop_transform_image_colorspace(module, (float *)input, roi_in.width, roi_in.height, input_format->cst,
+                                      dt_ioppr_module_default_input_colorspace(piece->pipe->iop_priorities, module->op), &input_format->cst);
+
     /* process module on cpu. use tiling if needed and possible. */
     if(piece->process_tiling_ready
        && !dt_tiling_piece_fits_host_memory(MAX(roi_in.width, roi_out->width),
@@ -1648,6 +1705,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
       pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     }
 
+    // and save the output colorspace
+    (*out_format)->cst = dt_ioppr_module_default_output_colorspace(piece->pipe->iop_priorities, module->op);
+    
     if(pipe->shutdown)
     {
       dt_pthread_mutex_unlock(&pipe->busy_mutex);

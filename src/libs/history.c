@@ -20,6 +20,7 @@
 #include "common/debug.h"
 #include "common/styles.h"
 #include "common/undo.h"
+#include "common/iop_priorities.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -285,42 +286,11 @@ static void _add_module_expander(GList *iop_list, dt_iop_module_t *module)
   // so we do it here
   if(!dt_iop_is_hidden(module) && !module->expander)
   {
-    // since multi_priority is in reverse order, we want the last one
-    // that is grather than this
-    dt_iop_module_t *base = NULL;
-    dt_iop_module_t *base_last = NULL;
-    GList *mods = g_list_last(iop_list);
-    while(mods)
-    {
-      dt_iop_module_t *mod = (dt_iop_module_t *)(mods->data);
-
-      if(mod != module && mod->instance == module->instance)
-      {
-        // we save the last one in case module is the last one
-        base_last = mod;
-        if(mod->multi_priority > module->multi_priority)
-        {
-          base = mod;
-          break;
-        }
-      }
-      mods = g_list_previous(mods);
-    }
-    if(base == NULL)
-    {
-      base = base_last;
-      base_last = NULL;
-    }
-    if(base)
-    {
       /* add module to right panel */
       GtkWidget *expander = dt_iop_gui_get_expander(module);
       dt_ui_container_add_widget(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER, expander);
       dt_iop_gui_set_expanded(module, TRUE, FALSE);
       dt_iop_gui_update_blending(module);
-    }
-    else
-      fprintf(stderr, "[_add_module_expander] can't find base for module %s\n", module->op);
   }
 }
 
@@ -455,7 +425,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
 
     modules = g_list_next(modules);
   }
-  if(deleted_module_found) iop_list = g_list_sort(iop_list, sort_plugins);
+  if(deleted_module_found) iop_list = g_list_sort(iop_list, dt_sort_iop_by_order);
 
   *_iop_list = iop_list;
 
@@ -544,9 +514,10 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
       // adjust the multi_name of the new module
       g_strlcpy(module->multi_name, hitem->multi_name, sizeof(module->multi_name));
       module->multi_priority = hitem->multi_priority;
+      module->iop_order = hitem->iop_order;
 
       // we insert this module into dev->iop
-      iop_list = g_list_insert_sorted(iop_list, module, sort_plugins);
+      iop_list = g_list_insert_sorted(iop_list, module, dt_sort_iop_by_order);
 
       // add the expander, dt_dev_reload_history_items() don't work well without one
       _add_module_expander(iop_list, module);
@@ -596,7 +567,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *d
     if(_rebuild_multi_priority(history_temp))
     {
       pipe_remove = 1;
-      iop_temp = g_list_sort(iop_temp, sort_plugins);
+      iop_temp = g_list_sort(iop_temp, dt_sort_iop_by_order);
     }
 
     // check if this undo a delete module and re-create it
@@ -646,6 +617,8 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t *d
     // write new history and reload
     dt_dev_write_history(dev);
     dt_dev_reload_history_items(dev);
+    
+    dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
   }
 }
 

@@ -317,8 +317,18 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
           }
         }
       }
+
+      // do not show non-active modules
+      // we don't want the user to mess with thouse
+      if(module->iop_order == FLT_MAX)
+      {
+        if(w) gtk_widget_hide(w);
+      }
     } while((modules = g_list_next(modules)) != NULL);
   }
+
+  // now that visibility has been updated set multi-show
+  dt_dev_modules_update_multishow(darktable.develop);
 }
 
 static void _lib_modulegroups_toggle(GtkWidget *button, gpointer user_data)

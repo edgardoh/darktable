@@ -132,6 +132,8 @@ typedef struct dt_dev_pixelpipe_t
   dt_iop_color_intent_t icc_intent;
   // snapshot of modules
   GList *iop;
+  // snapshot of modules priorities
+  GList *iop_priorities;
   // snapshot of mask list
   GList *forms;
 } dt_dev_pixelpipe_t;

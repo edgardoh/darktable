@@ -72,6 +72,7 @@ FILE(GLOB SOURCE_FILES
   "common/undo.c"
   "common/usermanual_url.c"
   "common/iop_group.c"
+  "common/iop_priorities.c"
   "control/control.c"
   "control/crawler.c"
   "control/jobs.c"

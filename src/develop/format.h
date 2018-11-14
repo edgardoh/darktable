@@ -56,6 +56,9 @@ typedef struct dt_iop_buffer_dsc_t
 
   /** sensor saturation, propagated through the operations */
   float processed_maximum[4];
+  
+  /** colorspace of the image */
+  int cst;
 } dt_iop_buffer_dsc_t;
 
 size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc);

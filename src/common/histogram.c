@@ -263,7 +263,8 @@ void dt_histogram_helper(dt_dev_histogram_collection_params_t *histogram_params,
       histogram_stats->ch = 1u;
       break;
 
-    case iop_cs_rgb:
+    case iop_cs_linear_rgb:
+    case iop_cs_gamma_rgb:
       dt_histogram_worker(histogram_params, histogram_stats, pixel, histogram, histogram_helper_cs_rgb);
       histogram_stats->ch = 3u;
       break;
@@ -289,7 +290,8 @@ void dt_histogram_max_helper(const dt_dev_histogram_stats_t *const histogram_sta
         histogram_max[0] = histogram_max[0] > hist[k] ? histogram_max[0] : hist[k];
       break;
 
-    case iop_cs_rgb:
+    case iop_cs_linear_rgb:
+    case iop_cs_gamma_rgb:
       // don't count <= 0 pixels
       for(int k = 4; k < 4 * histogram_stats->bins_count; k += 4)
         histogram_max[0] = histogram_max[0] > hist[k] ? histogram_max[0] : hist[k];

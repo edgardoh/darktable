@@ -18,6 +18,7 @@
 
 #include "develop/format.h"
 #include "develop/imageop.h"
+#include "common/iop_priorities.h"
 
 size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
 {
@@ -39,6 +40,7 @@ size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
   return bpp;
 }
 
+#if 0
 static int _iop_module_rawprepare = 0, _iop_module_demosaic = 0;
 static inline void _get_iop_priorities(const dt_iop_module_t *module)
 {
@@ -89,6 +91,40 @@ void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_d
   if(pipe->image.flags & DT_IMAGE_RAW) dsc->channels = 1;
 
   if(self->priority >= _iop_module_rawprepare) return;
+
+  if(piece->pipe->dsc.filters)
+    dsc->datatype = TYPE_UINT16;
+}
+#endif
+void default_input_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                          dt_iop_buffer_dsc_t *dsc)
+{
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
+  dsc->cst = dt_ioppr_module_default_input_colorspace(pipe->iop_priorities, self->op);
+
+  if(dsc->cst != iop_cs_RAW) return;
+
+  if(pipe->image.flags & DT_IMAGE_RAW) dsc->channels = 1;
+
+  if(dt_ioppr_get_iop_order(pipe->iop_priorities, self->op) > dt_ioppr_get_iop_order(pipe->iop_priorities, "rawprepare")) return;
+
+  if(piece->pipe->dsc.filters)
+    dsc->datatype = TYPE_UINT16;
+}
+
+void default_output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                           dt_iop_buffer_dsc_t *dsc)
+{
+  dsc->channels = 4;
+  dsc->datatype = TYPE_FLOAT;
+  dsc->cst = dt_ioppr_module_default_output_colorspace(pipe->iop_priorities, self->op);
+
+  if(dsc->cst != iop_cs_RAW) return;
+
+  if(pipe->image.flags & DT_IMAGE_RAW) dsc->channels = 1;
+
+  if(dt_ioppr_get_iop_order(pipe->iop_priorities, self->op) >= dt_ioppr_get_iop_order(pipe->iop_priorities, "rawprepare")) return;
 
   if(piece->pipe->dsc.filters)
     dsc->datatype = TYPE_UINT16;

@@ -50,7 +50,7 @@ int groups()
 
 int flags()
 {
-  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE;
+  return IOP_FLAGS_HIDDEN | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_FENCE;
 }
 
 static inline float Hue_2_RGB(float v1, float v2, float vH)

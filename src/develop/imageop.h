@@ -91,7 +91,8 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_PREVIEW_NON_OPENCL
   = 1 << 8, // Preview pixelpipe of this module must not run on GPU but always on CPU
   IOP_FLAGS_NO_HISTORY_STACK = 1 << 9, // This iop will never show up in the history stack
-  IOP_FLAGS_NO_MASKS = 1 << 10         // The module doesn't support masks (used with SUPPORT_BLENDING)
+  IOP_FLAGS_NO_MASKS = 1 << 10,         // The module doesn't support masks (used with SUPPORT_BLENDING)
+  IOP_FLAGS_FENCE = 1 << 11              // No module can be moved pass this one
 } dt_iop_flags_t;
 
 /** status of a module*/
@@ -254,6 +255,8 @@ typedef struct dt_iop_module_t
   int32_t instance;
   /** order in which plugins are stacked. */
   int32_t priority;
+  /** order of the module on the pipe. the pipe will be sorted by iop_order, priority. */
+  float iop_order;
   /** module sets this if the enable checkbox should be hidden. */
   int32_t hide_enable_button;
   /** set to DT_REQUEST_COLORPICK_MODULE if you want an input color picked during next eval. gui mode only. */
@@ -328,6 +331,7 @@ typedef struct dt_iop_module_t
   gboolean multi_show_close;
   gboolean multi_show_up;
   gboolean multi_show_down;
+  gboolean multi_show_new;
   GtkWidget *duplicate_button;
   GtkWidget *multimenu_button;
 
@@ -470,7 +474,6 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, st
 GList *dt_iop_load_modules_ext(struct dt_develop_t *dev, gboolean no_image);
 GList *dt_iop_load_modules(struct dt_develop_t *dev);
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, struct dt_develop_t *dev);
-gint sort_plugins(gconstpointer a, gconstpointer b);
 /** calls module->cleanup and closes the dl connection. */
 void dt_iop_cleanup_module(dt_iop_module_t *module);
 /** initialize pipe. */
@@ -532,13 +535,16 @@ void dt_iop_nap(int32_t usec);
 /** colorspace enums */
 typedef enum dt_iop_colorspace_type_t
 {
-  iop_cs_RAW,
-  iop_cs_Lab,
-  iop_cs_rgb
+  iop_cs_RAW = 1,
+  iop_cs_Lab = 2,
+  iop_cs_linear_rgb = 3,
+  iop_cs_gamma_rgb = 4
 } dt_iop_colorspace_type_t;
 
+#if 0
 /** find which colorspace the module works within */
 dt_iop_colorspace_type_t dt_iop_module_colorspace(const dt_iop_module_t *module);
+#endif
 
 dt_iop_module_t *get_colorout_module();
 
@@ -547,6 +553,11 @@ gchar *dt_iop_get_localized_name(const gchar *op);
 
 /** Connects common accelerators to an iop module */
 void dt_iop_connect_common_accels(dt_iop_module_t *module);
+
+/** returns the previous visible module on the module list */
+dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module);
+/** returns the next visible module on the module list */
+dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module);
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
