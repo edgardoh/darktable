@@ -152,6 +152,7 @@ static GList *_ioppr_get_iop_order_v1()
                                                   { 0.0, "shadhi" },
                                                   { 0.0, "atrous" },
                                                   { 0.0, "bilat" },
+                                                  { 0.0, "loclaplab_eh" }, /* modification EFH */
                                                   { 0.0, "colorzones" },
                                                   { 0.0, "lowlight" },
                                                   { 0.0, "monochrome" },
