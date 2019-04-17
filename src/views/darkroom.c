@@ -934,6 +934,7 @@ static gboolean zoom_key_accel(GtkAccelGroup *accel_group, GObject *acceleratabl
     default:
       break;
   }
+  dt_control_queue_redraw_center();
   return TRUE;
 }
 
