@@ -934,7 +934,6 @@ static gboolean zoom_key_accel(GtkAccelGroup *accel_group, GObject *acceleratabl
     default:
       break;
   }
-  dt_control_queue_redraw_center();
   return TRUE;
 }
 
@@ -2383,6 +2382,8 @@ void enter(dt_view_t *self)
   dev->form_gui->formid = 0;
   dev->gui_leaving = 0;
   dev->gui_module = NULL;
+  dev->image_timeout_handle = 0;
+  dev->preview_timeout_handle = 0;
 
   select_this_image(dev->image_storage.id);
 
