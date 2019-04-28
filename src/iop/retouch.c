@@ -1210,7 +1210,8 @@ static void rt_curr_scale_update(const int _curr_scale, dt_iop_module_t *self)
   dt_pthread_mutex_lock(&g->lock);
   if(g->displayed_wavelet_scale == 0 && p->preview_levels[0] == RETOUCH_PREVIEW_LVL_MIN
      && p->preview_levels[1] == 0.f && p->preview_levels[2] == RETOUCH_PREVIEW_LVL_MAX
-     && g->preview_auto_levels == 0 && p->curr_scale > 0 && p->curr_scale <= p->num_scales)
+     && g->preview_auto_levels == 0 && p->curr_scale > 0 && p->curr_scale <= p->num_scales
+     && g->display_wavelet_scale)
   {
     g->preview_auto_levels = 1;
     g->displayed_wavelet_scale = 1;
