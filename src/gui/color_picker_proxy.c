@@ -168,6 +168,8 @@ static void _iop_init_picker(dt_iop_color_picker_t *picker, dt_iop_module_t *mod
   picker->kind    = kind;
   picker->requested_by = requested_by;
   picker->picker_cst = iop_cs_NONE;
+  picker->find_gap = FALSE;
+  picker->channel = DT_COLOR_PICKER_CHANNEL_0;
   picker->skip_apply = FALSE;
   if(picker->requested_by == DT_COLOR_PICKER_REQ_MODULE)
     module->picker  = picker;
@@ -283,7 +285,7 @@ static gboolean _iop_color_picker_callback(GtkWidget *button, GdkEventButton *e,
     _iop_color_picker_reset(self, FALSE);
   }
   dt_iop_color_picker_update(self);
-  dt_control_queue_redraw();
+  dt_control_queue_redraw_center();
   dt_iop_request_focus(self->module);
 
   return TRUE;
@@ -314,6 +316,40 @@ dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *mod
     picker_cst = module->picker->picker_cst;
 
   return picker_cst;
+}
+
+void dt_iop_color_picker_set_find_gap(dt_iop_color_picker_t *picker, const gboolean find_gap)
+{
+  picker->find_gap = find_gap;
+}
+
+gboolean dt_iop_color_picker_get_active_find_gap(dt_iop_module_t *module)
+{
+  gboolean find_gap = FALSE;
+
+  if(module->request_color_pick == DT_REQUEST_COLORPICK_BLEND && module->blend_picker)
+    find_gap = module->blend_picker->find_gap;
+  else if(module->request_color_pick == DT_REQUEST_COLORPICK_MODULE && module->picker)
+    find_gap = module->picker->find_gap;
+
+  return find_gap;
+}
+
+void dt_iop_color_picker_set_channel(dt_iop_color_picker_t *picker, const dt_color_picker_channels_t channel)
+{
+  picker->channel = channel;
+}
+
+dt_color_picker_channels_t dt_iop_color_picker_get_active_channel(dt_iop_module_t *module)
+{
+  dt_color_picker_channels_t channel = DT_COLOR_PICKER_CHANNEL_0;
+
+  if(module->request_color_pick == DT_REQUEST_COLORPICK_BLEND && module->blend_picker)
+    channel = module->blend_picker->channel;
+  else if(module->request_color_pick == DT_REQUEST_COLORPICK_MODULE && module->picker)
+    channel = module->picker->channel;
+
+  return channel;
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

@@ -31,6 +31,7 @@
 
 #include <gtk/gtk.h>
 #include "develop/imageop.h"
+#include "common/color_picker.h"
 
 typedef enum _iop_color_picker_kind_t
 {
@@ -50,6 +51,10 @@ typedef struct dt_iop_color_picker_t
    * iop_cs_HSL: for RGB modules
    */
   dt_iop_colorspace_type_t picker_cst;
+  /** calculates the ranges to be applied based on the 'gaps' on the selected range */
+  gboolean find_gap;
+  /** the channel to be processed if it is called from the blend module */
+  dt_color_picker_channels_t channel;
   unsigned short current_picker;
   /** used to avoid recursion when a parameter is modified in the apply() */
   gboolean skip_apply;
@@ -118,9 +123,18 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean update);
 
 /* sets the picker colorspace */
 void dt_iop_color_picker_set_cst(dt_iop_color_picker_t *picker, const dt_iop_colorspace_type_t picker_cst);
-
 /* returns the active picker colorspace (if any) */
 dt_iop_colorspace_type_t dt_iop_color_picker_get_active_cst(dt_iop_module_t *module);
+
+/* sets the picker find_gap setting */
+void dt_iop_color_picker_set_find_gap(dt_iop_color_picker_t *picker, const gboolean find_gap);
+/* returns the find_gap setting for the active picker (if any) */
+gboolean dt_iop_color_picker_get_active_find_gap(dt_iop_module_t *module);
+
+/* sets the picker channel setting */
+void dt_iop_color_picker_set_channel(dt_iop_color_picker_t *picker, const dt_color_picker_channels_t channel);
+/* returns the channel setting for the active picker (if any) */
+dt_color_picker_channels_t dt_iop_color_picker_get_active_channel(dt_iop_module_t *module);
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

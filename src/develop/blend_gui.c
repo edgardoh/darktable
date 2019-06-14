@@ -525,6 +525,35 @@ static dt_iop_colorspace_type_t _blendop_blendif_get_picker_colorspace(dt_iop_gu
   return picker_cst;
 }
 
+static dt_iop_colorspace_type_t _blendop_blendif_get_picker_channel(dt_iop_gui_blend_data_t *bd)
+{
+  dt_color_picker_channels_t channel;
+  const int tab = bd->tab;
+
+  switch(bd->csp)
+  {
+    case iop_cs_Lab:
+      if(tab < 3)
+        channel = (dt_color_picker_channels_t)tab;
+      else
+        channel = (dt_color_picker_channels_t)(tab - 2);
+      break;
+    case iop_cs_rgb:
+      if(tab == 0)
+        channel = DT_COLOR_PICKER_CHANNEL_GREY;
+      else if(tab < 4)
+        channel = (dt_color_picker_channels_t)(tab - 1);
+      else
+        channel = (dt_color_picker_channels_t)(tab - 4);
+      break;
+    default:
+      channel = DT_COLOR_PICKER_CHANNEL_0;
+      break;
+  }
+
+  return channel;
+}
+
 static void _update_gradient_slider(GtkWidget *widget, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *data = module->blend_data;
@@ -598,6 +627,7 @@ static void _blendop_blendif_tab_switch(GtkNotebook *notebook, GtkWidget *page, 
       (cst_old != _blendop_blendif_get_picker_colorspace(data) || data->color_picker.current_picker == DT_BLENDIF_PICK_SET_VALUES))
   {
     dt_iop_color_picker_set_cst(&data->color_picker, _blendop_blendif_get_picker_colorspace(data));
+    dt_iop_color_picker_set_channel(&data->color_picker, _blendop_blendif_get_picker_channel(data));
     dt_dev_reprocess_all(data->module->dev);
     dt_control_queue_redraw();
   }
@@ -1065,6 +1095,9 @@ static void _iop_color_picker_apply(struct dt_iop_module_t *module, dt_dev_pixel
     else
       bp->blendif |= (1 << ch);
 
+    // avoid recursion
+    data->color_picker.skip_apply = TRUE;
+
     dt_dev_add_history_item(darktable.develop, module, TRUE);
   }
   break;
@@ -1090,6 +1123,7 @@ static void _iop_color_picker_update(dt_iop_module_t *self)
   if(self->request_color_pick != DT_REQUEST_COLORPICK_BLEND)
   {
     dt_iop_color_picker_set_cst(&data->color_picker, iop_cs_NONE);
+    dt_iop_color_picker_set_find_gap(&data->color_picker, FALSE);
 
     dtgtk_gradient_slider_multivalue_set_picker(DTGTK_GRADIENT_SLIDER(data->upper_slider), NAN);
     gtk_label_set_text(data->upper_picker_label, "");
@@ -1116,10 +1150,19 @@ static gboolean _blendop_blendif_color_picker_callback_button_press(GtkWidget *w
     color_picker->kind = DT_COLOR_PICKER_AREA;
 
   GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
-  if((e->state & modifiers) == GDK_CONTROL_MASK) // lower=0, upper=1
+  if(((e->state & modifiers) & GDK_CONTROL_MASK) == GDK_CONTROL_MASK) // lower=0, upper=1
     bd->picker_set_upper_lower = 1;
   else
     bd->picker_set_upper_lower = 0;
+
+  if(((e->state & modifiers) & GDK_SHIFT_MASK) == GDK_SHIFT_MASK)
+    dt_iop_color_picker_set_find_gap(&bd->color_picker, TRUE);
+  else
+    dt_iop_color_picker_set_find_gap(&bd->color_picker, FALSE);
+
+  printf("[_blendop_blendif_color_picker_callback_button_press] tab=%i, channel=%i\n", bd->tab, _blendop_blendif_get_picker_channel(bd));
+  dt_iop_color_picker_set_channel(&bd->color_picker, _blendop_blendif_get_picker_channel(bd));
+
 
   return dt_iop_color_picker_callback_button_press(widget, e, color_picker);
 }
@@ -1500,12 +1543,12 @@ void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module)
 
     bd->colorpicker
         = dtgtk_togglebutton_new(dtgtk_cairo_paint_colorpicker, CPF_STYLE_FLAT | CPF_DO_NOT_USE_BORDER, NULL);
-    gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nctrl+click to select an area"));
+    gtk_widget_set_tooltip_text(bd->colorpicker, _("pick GUI color from image\nctrl+click to select an area\nuse shift to search for gaps"));
 
     bd->colorpicker_set_values = dtgtk_togglebutton_new(dtgtk_cairo_paint_colorpicker_set_values,
                                                         CPF_STYLE_FLAT | CPF_DO_NOT_USE_BORDER, NULL);
     gtk_widget_set_tooltip_text(bd->colorpicker_set_values, _("set the range based on an area from the image\n"
-        "click+drag to use the input image\nctrl+click + drag to use the output image"));
+        "click+drag to use the input image\nctrl+click + drag to use the output image\nuse shift to search for gaps"));
 
     GtkWidget *res = dtgtk_button_new(dtgtk_cairo_paint_reset, CPF_STYLE_FLAT | CPF_DO_NOT_USE_BORDER, NULL);
     gtk_widget_set_tooltip_text(res, _("reset blend mask settings"));
