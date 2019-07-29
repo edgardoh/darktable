@@ -395,7 +395,7 @@ static float exposure_increment(float stops, int e, float fusion, float bias)
   return powf(2.0f, stops * e + offset);
 }
 
-#ifdef HAVE_OPENCL
+#ifdef HAVE_OPENCLx
 static
 int gauss_blur_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                   cl_mem dev_in, cl_mem dev_out, cl_mem dev_tmp,
